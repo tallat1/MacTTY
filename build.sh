@@ -20,7 +20,7 @@ cmake -S putty -B $dir -G Ninja \
     -DCMAKE_BUILD_TYPE=$type \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
     -DCMAKE_OBJC_FLAGS="$flags" \
-    -DCMAKE_PROJECT_INCLUDE="$PWD/macos/inject.cmake"
+    -DCMAKE_PROJECT_INCLUDE="$PWD/macos/cmake/inject.cmake"
 ninja -C $dir MacTTY
 
 echo

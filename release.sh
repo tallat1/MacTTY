@@ -23,7 +23,7 @@ for arch in arm64 x86_64; do
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES=$arch \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=$minos \
-      -DCMAKE_PROJECT_INCLUDE="$PWD/macos/inject.cmake"
+      -DCMAKE_PROJECT_INCLUDE="$PWD/macos/cmake/inject.cmake"
   ninja -C build-$arch MacTTY
 done
 

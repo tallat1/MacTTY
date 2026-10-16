@@ -243,29 +243,30 @@ dosyasındadır.
 
 <br>
 
+Ayrıntılı anlatım, bağımlılık kuralları ve "yeni bir şey nereye yazılır"
+tablosu için: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ```
-putty/      PuTTY 0.85 kaynağı (sha512 doğrulanmış resmi sürüm)
-build.sh    geliştirme derlemesi
-release.sh  universal, imzalı DMG
-VERSION     MacTTY sürümü (Info.plist'lere ve About kutularına gider)
-docs/       README görselleri
-macos/      Cocoa ön yüzü
-  inject.cmake     PuTTY'nin CMake'ine kendi hedefimizi ekler
-  targets.cmake    MacTTY.app, MacTTYgen.app ve Pageant.app hedefleri
-  eventloop.m      uxsel / zamanlayıcı / toplevel callback → CFRunLoop
-  TerminalView.m   CoreText çizimi, klavye ve fare çevirisi
-  Session.m        TermWin, Seat, LogPolicy; oturum yaşam döngüsü
-  ConfigDialog.m   dialog.h kontrol kutusu çizici ve dlg_* API
-  Dialogs.m        güvenlik uyarıları, Event Log, About
-  config-mac.c     Mac'e özgü ayar seçenekleri (windows/config.c karşılığı)
-  platform-mac.m   platform varsayılanları, seri port listesi
-  recent.m         son oturumlar
-  AppDelegate.m    menü çubuğu, açılış, komut satırı
-  Keygen.m         MacTTYgen (windows/puttygen.c karşılığı)
-  Pageant.m        Pageant ön yüzü (windows/pageant.c karşılığı)
-  pageant-socket.c Pageant soketinin yeri; MacTTY'nin ajan seçimi
-  tools.m          MacTTYgen ve Pageant'ın ortak diyalogları
-  icons/           uygulama ikonları (Icon Composer belgeleri, .icon)
+putty/                 PuTTY 0.85 kaynağı (sha512 doğrulanmış resmi sürüm)
+macos/
+  cmake/               PuTTY'nin CMake'ine kanca, uygulama hedefleri, ikon derleme
+  shared/              birden çok uygulamanın kullandığı kod
+    eventloop          PuTTY olay döngüsü → CFRunLoop
+    agent-socket       Pageant soketi, MacTTY'nin ajan seçimi
+    companion          MacTTYgen ve Pageant'ın ortak diyalogları
+  MacTTY/              terminal uygulaması (Info.plist, ikon ve kaynaklar)
+    App/               giriş noktası, menü çubuğu, mesaj kutuları, About
+    Session/           oturum penceresi; PuTTY'ye bakan yüzü (TermWin, Seat,
+                       LogPolicy); güvenlik soruları; Event Log; son oturumlar
+    Terminal/          CoreText çizimi, klavye ve fare
+    Config/            ayar penceresi (dialog.h çizici) ve Mac'e özgü paneller
+    Platform/          PuTTY platform kancaları, seri port listesi
+  MacTTYgen/           anahtar üretici (windows/puttygen.c karşılığı)
+  Pageant/             SSH ajanı (windows/pageant.c karşılığı)
+docs/                  mimari belgesi ve README görselleri
+build.sh               geliştirme derlemesi
+release.sh             universal, imzalı DMG
+VERSION                MacTTY sürümü (Info.plist'lere ve About kutularına gider)
 ```
 
 PuTTY kaynağında tek bir değişiklik vardır: `putty/unix/platform.h`
