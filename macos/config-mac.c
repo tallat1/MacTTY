@@ -33,6 +33,65 @@ static void move_after_checkbox(struct controlset *s, int conf_key)
     }
 }
 
+/*
+ * The host name and port boxes on the Session panel get drop-down
+ * lists: for a serial line, the serial ports that are plugged in and
+ * the usual speeds; otherwise the hosts connected to recently. The
+ * boxes keep config.c's own handlers, which pick their label and text
+ * by protocol; these wrappers only add the lists. A list item may be
+ * "value\tdescription": the box takes the value.
+ */
+static handler_fn host_handler_orig, port_handler_orig;
+
+static void host_list_handler(dlgcontrol *ctrl, dlgparam *dlg,
+                              void *data, int event)
+{
+    Conf *conf = (Conf *)data;
+    host_handler_orig(ctrl, dlg, data, event);
+    if (event != EVENT_REFRESH)
+        return;
+
+    dlg_update_start(ctrl, dlg);
+    dlg_listbox_clear(ctrl, dlg);
+    if (conf_get_int(conf, CONF_protocol) == PROT_SERIAL) {
+        char **lines = mactty_serial_lines();
+        for (char **p = lines; *p; p++) {
+            char *desc = mactty_serial_line_description(*p);
+            char *item = desc ? dupprintf("%s\t%s", *p, desc) : dupstr(*p);
+            dlg_listbox_add(ctrl, dlg, item);
+            sfree(item);
+            sfree(desc);
+        }
+        mactty_free_string_array(lines);
+    } else {
+        char **hosts = mactty_recent_hosts();
+        for (char **p = hosts; *p; p++)
+            dlg_listbox_add(ctrl, dlg, *p);
+        mactty_free_string_array(hosts);
+    }
+    dlg_update_done(ctrl, dlg);
+}
+
+static void port_list_handler(dlgcontrol *ctrl, dlgparam *dlg,
+                              void *data, int event)
+{
+    static const char *const speeds[] = {
+        "9600", "19200", "38400", "57600", "115200", "230400", "460800",
+        "921600",
+    };
+    Conf *conf = (Conf *)data;
+    port_handler_orig(ctrl, dlg, data, event);
+    if (event != EVENT_REFRESH)
+        return;
+
+    dlg_update_start(ctrl, dlg);
+    dlg_listbox_clear(ctrl, dlg);
+    if (conf_get_int(conf, CONF_protocol) == PROT_SERIAL)
+        for (size_t i = 0; i < lenof(speeds); i++)
+            dlg_listbox_add(ctrl, dlg, speeds[i]);
+    dlg_update_done(ctrl, dlg);
+}
+
 void mac_setup_config_box(struct controlbox *b, bool midsession,
                           int protocol)
 {
@@ -183,4 +242,35 @@ void mac_setup_config_box(struct controlbox *b, bool midsession,
                   HELPCTX(behaviour_altenter),
                   conf_checkbox_handler,
                   I(CONF_fullscreenonaltenter));
+
+    /*
+     * Cancel before Open (or Apply): macOS puts the default button
+     * rightmost.
+     */
+    s = ctrl_getset(b, "", "", "");
+    for (size_t i = 0; i < s->ncontrols; i++) {
+        c = s->ctrls[i];
+        if (c->type == CTRL_BUTTON && c->button.isdefault)
+            c->column = 4;
+        else if (c->type == CTRL_BUTTON && c->button.iscancel)
+            c->column = 3;
+    }
+
+    if (!midsession) {
+        int nedit = 0;
+        s = ctrl_getset(b, "Session", "hostport", NULL);
+        for (size_t i = 0; i < s->ncontrols && nedit < 2; i++) {
+            c = s->ctrls[i];
+            if (c->type != CTRL_EDITBOX)
+                continue;
+            c->editbox.has_list = true;
+            if (nedit++ == 0) {
+                host_handler_orig = c->handler;
+                c->handler = host_list_handler;
+            } else {
+                port_handler_orig = c->handler;
+                c->handler = port_list_handler;
+            }
+        }
+    }
 }

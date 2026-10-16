@@ -5,6 +5,8 @@
  */
 
 #import <Cocoa/Cocoa.h>
+#import <IOKit/IOKitLib.h>
+#import <IOKit/serial/IOSerialKeys.h>
 #include <dirent.h>
 
 #include "putty.h"
@@ -101,6 +103,58 @@ char **mactty_serial_lines(void)
     lines[n] = NULL;
     qsort(lines, n, sizeof(char *), compare_strings);
     return lines;
+}
+
+/* The USB device a serial line belongs to, as IOKit names it. */
+static NSString *usb_property(io_object_t service, CFStringRef key)
+{
+    CFTypeRef v = IORegistryEntrySearchCFProperty(
+        service, kIOServicePlane, key, kCFAllocatorDefault,
+        kIORegistryIterateRecursively | kIORegistryIterateParents);
+    if (!v)
+        return nil;
+    if (CFGetTypeID(v) != CFStringGetTypeID()) {
+        CFRelease(v);
+        return nil;
+    }
+    NSString *s = CFBridgingRelease(v);
+    s = [s stringByTrimmingCharactersInSet:
+             NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return s.length ? s : nil;
+}
+
+char *mactty_serial_line_description(const char *path)
+{
+    io_iterator_t it;
+    if (IOServiceGetMatchingServices(
+            kIOMainPortDefault, IOServiceMatching(kIOSerialBSDServiceValue),
+            &it) != KERN_SUCCESS)
+        return NULL;
+
+    NSString *want = [NSString stringWithUTF8String:path];
+    char *ret = NULL;
+    io_object_t service;
+    while (!ret && (service = IOIteratorNext(it))) {
+        CFTypeRef callout = IORegistryEntryCreateCFProperty(
+            service, CFSTR(kIOCalloutDeviceKey), kCFAllocatorDefault, 0);
+        if (callout && CFGetTypeID(callout) == CFStringGetTypeID() &&
+            [(__bridge NSString *)callout isEqualToString:want]) {
+            NSString *product = usb_property(service,
+                                             CFSTR("USB Product Name"));
+            NSString *vendor = usb_property(service,
+                                            CFSTR("USB Vendor Name"));
+            NSString *desc = product && vendor ?
+                [NSString stringWithFormat:@"%@ · %@", product, vendor] :
+                (product ?: vendor);
+            if (desc)
+                ret = dupstr(desc.UTF8String);
+        }
+        if (callout)
+            CFRelease(callout);
+        IOObjectRelease(service);
+    }
+    IOObjectRelease(it);
+    return ret;
 }
 
 void mactty_free_string_array(char **array)

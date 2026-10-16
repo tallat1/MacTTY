@@ -26,6 +26,62 @@ static NSMutableArray<MTSession *> *all_sessions;
 @property (nonatomic, unsafe_unretained) MTSession *session;
 @end
 
+/* The bar along the bottom of a window whose session has ended, with
+ * Restart Session and Close at hand. */
+@interface MTEndBar : NSView
+@property (nonatomic, strong) NSTextField *message;
+@end
+
+@implementation MTEndBar
+- (instancetype)initWithTarget:(id)target
+{
+    if (!(self = [super initWithFrame:NSMakeRect(0, 0, 400, 40)]))
+        return nil;
+    NSImageView *icon = [NSImageView imageViewWithImage:
+        [NSImage imageWithSystemSymbolName:@"info.circle"
+                  accessibilityDescription:nil]];
+    icon.contentTintColor = NSColor.secondaryLabelColor;
+    _message = [NSTextField labelWithString:@""];
+    _message.lineBreakMode = NSLineBreakByTruncatingTail;
+    [_message setContentCompressionResistancePriority:
+                  NSLayoutPriorityDefaultLow
+                  forOrientation:NSLayoutConstraintOrientationHorizontal];
+    NSButton *restart = [NSButton buttonWithTitle:@"Restart Session"
+                                           target:target
+                                           action:@selector(restartSession:)];
+    NSButton *close = [NSButton buttonWithTitle:@"Close" target:target
+                                         action:@selector(closeEndedSession:)];
+    restart.toolTip = @"Restart the session (Command-R)";
+    close.toolTip = @"Close the window (Command-W)";
+    NSStackView *row = [NSStackView stackViewWithViews:
+                           @[icon, _message, restart, close]];
+    row.spacing = 8;
+    row.edgeInsets = NSEdgeInsetsMake(0, 12, 0, 10);
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:row];
+    [NSLayoutConstraint activateConstraints:@[
+        [row.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [row.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [row.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+    ]];
+    self.accessibilityRole = NSAccessibilityGroupRole;
+    self.accessibilityLabel = @"Session status";
+    self.clipsToBounds = YES;
+    return self;
+}
+
+- (void)drawRect:(NSRect)r
+{
+    /* Since macOS 14 views are not clipped to their bounds, and the
+     * dirty rectangle may reach beyond them. */
+    [NSColor.windowBackgroundColor setFill];
+    NSRectFill(NSIntersectionRect(r, self.bounds));
+    [NSColor.separatorColor setFill];
+    NSRectFill(NSMakeRect(0, self.bounds.size.height - 1,
+                          self.bounds.size.width, 1));
+}
+@end
+
 @interface MTSession ()
 - (void)layoutContent;
 - (void)startBackend;
@@ -504,6 +560,10 @@ static const LogPolicyVtable mac_logpolicy_vt = {
     BOOL inFullScreen;
     BOOL fullScreenTransition, zooming;
     int eventLogDropped;
+    MTEndBar *endBar;
+    BOOL endBarShown;
+    NSString *savedSessionName;
+    NSString *fatalSummary;
 }
 
 + (NSArray<MTSession *> *)sessions
@@ -513,10 +573,16 @@ static const LogPolicyVtable mac_logpolicy_vt = {
 
 + (void)openSessionWithConf:(Conf *)conf
 {
+    [self openSessionWithConf:conf savedSession:nil];
+}
+
++ (void)openSessionWithConf:(Conf *)conf savedSession:(NSString *)name
+{
     prepare_session(conf);
     MTSession *s = [[MTSession alloc] initWithConf:conf];
     if (!s)
         return;
+    s->savedSessionName = [name copy];
     if (!all_sessions)
         all_sessions = [NSMutableArray new];
     [all_sessions addObject:s];
@@ -738,11 +804,48 @@ static const LogPolicyVtable mac_logpolicy_vt = {
     NSRect b = container.bounds;
     CGFloat sw = [self scrollbarWidth];
     BOOL left = conf && conf_get_bool(conf, CONF_scrollbar_on_left);
+    CGFloat barh = endBarShown ? 40 : 0;
     scroller.hidden = (sw == 0);
-    _termView.frame = NSMakeRect(left ? sw : 0, 0, b.size.width - sw,
-                                 b.size.height);
-    scroller.frame = NSMakeRect(left ? 0 : b.size.width - sw, 0, sw,
-                                b.size.height);
+    endBar.hidden = !endBarShown;
+    endBar.frame = NSMakeRect(0, 0, b.size.width, barh);
+    _termView.frame = NSMakeRect(left ? sw : 0, barh, b.size.width - sw,
+                                 b.size.height - barh);
+    scroller.frame = NSMakeRect(left ? 0 : b.size.width - sw, barh, sw,
+                                b.size.height - barh);
+}
+
+/* The session has ended but the window stays: say so in the title, as
+ * Windows PuTTY does, and offer Restart and Close underneath. */
+- (void)showInactive:(NSString *)message
+{
+    NSWindow *w = self.window;
+    if (!w.isVisible)
+        return;
+    if (![w.title hasSuffix:@" (inactive)"])
+        w.title = [w.title stringByAppendingString:@" (inactive)"];
+    if (!endBar) {
+        endBar = [[MTEndBar alloc] initWithTarget:self];
+        [container addSubview:endBar];
+    }
+    endBar.message.stringValue = message;
+    endBarShown = YES;
+    [self layoutContent];
+}
+
+- (void)hideInactive
+{
+    if (!endBarShown)
+        return;
+    endBarShown = NO;
+    NSWindow *w = self.window;
+    if ([w.title hasSuffix:@" (inactive)"])
+        w.title = [w.title substringToIndex:w.title.length - 11];
+    [self layoutContent];
+}
+
+- (IBAction)closeEndedSession:(id)sender
+{
+    [self.window performClose:nil];
 }
 
 - (void)terminalViewDidChangeSize
@@ -1096,6 +1199,7 @@ NSPasteboard *mactty_pasteboard(void)
     sfree(realhost);
     term_provide_backend(term, backend);
     ldisc = ldisc_create(conf, term, backend, &fe.seat);
+    mactty_note_recent_session(conf, savedSessionName.UTF8String);
 }
 
 - (void)destroyConnection
@@ -1124,6 +1228,11 @@ NSPasteboard *mactty_pasteboard(void)
             (close_on_exit == AUTO && exitcode == 0)) {
             closingConfirmed = YES;
             [self.window close];
+        } else {
+            [self showInactive:exitcode == 0 ? @"Session ended." :
+                [NSString stringWithFormat:
+                    @"Session ended. The remote side exited with code %d.",
+                    exitcode]];
         }
     }
 }
@@ -1133,10 +1242,21 @@ static void connection_fatal_callback(void *vctx)
     MacFrontend *fe = (MacFrontend *)vctx;
     MTSession *s = (__bridge MTSession *)fe->session;
     [s destroyConnection];
+    [s showInactive:s->fatalSummary ?: @"Connection closed."];
 }
 
 - (void)connectionFatal:(const char *)msg
 {
+    /* The first line is the gist ("Network error: Connection refused"). */
+    NSString *m = @(msg) ?: @"";
+    NSArray *lines = [m componentsSeparatedByCharactersInSet:
+                         NSCharacterSet.newlineCharacterSet];
+    NSString *last = nil;
+    for (NSString *l in lines)
+        if (l.length)
+            last = l;
+    fatalSummary = last ? [NSString stringWithFormat:@"Connection closed: %@",
+                           last] : @"Connection closed.";
     BOOL closeAfter = (conf_get_int(conf, CONF_close_on_exit) == FORCE_ON);
     NSAlert *alert = [[NSAlert alloc] init];
     alert.alertStyle = NSAlertStyleCritical;
@@ -1378,12 +1498,14 @@ static void connection_fatal_callback(void *vctx)
 - (IBAction)duplicateSession:(id)sender
 {
     if (conf)
-        [MTSession openSessionWithConf:conf_copy(conf)];
+        [MTSession openSessionWithConf:conf_copy(conf)
+                          savedSession:savedSessionName];
 }
 
 - (IBAction)restartSession:(id)sender
 {
     if (!backend && term) {
+        [self hideInactive];
         logevent(logctx, "----- Session restarted -----");
         term_pwron(term, false);
         [self startBackend];

@@ -352,6 +352,9 @@ static PageantListenerClient listener_client = {
 - (void)reload;
 @end
 
+/* The number of keys on the menu bar item (MTPageantApp, below). */
+static void update_status_item(void);
+
 static NSString *display_path(const char *path)
 {
     /* As the user would type it: ~ for the home directory. */
@@ -405,6 +408,7 @@ static NSString *agent_env_command(void)
     NSPopUpButton *fpPopup;
     NSButton *removeButton, *reencryptButton;
     NSTextField *socketField;
+    NSTextField *emptyHint;
 }
 
 static const struct {
@@ -477,13 +481,21 @@ static const struct {
                       display_path(agent_path())];
     socketField.editable = NO;
     socketField.selectable = YES;
-    socketField.frame = NSMakeRect(150, y, W - 150 - 166, 22);
+    socketField.frame = NSMakeRect(150, y, W - 150 - 166 - 196, 22);
     socketField.autoresizingMask = NSViewWidthSizable;
     socketField.accessibilityLabel = @"SSH_AUTH_SOCK";
     socketField.toolTip = @"Give this to other SSH clients (OpenSSH's "
         "ssh, ssh-add, git...) as SSH_AUTH_SOCK, or as IdentityAgent "
         "in ~/.ssh/config. MacTTY uses it automatically.";
     [c addSubview:socketField];
+    NSTextField *auto_ = [NSTextField labelWithString:
+                             @"MacTTY uses it automatically"];
+    auto_.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+    auto_.textColor = NSColor.secondaryLabelColor;
+    auto_.alignment = NSTextAlignmentRight;
+    auto_.frame = NSMakeRect(W - 166 - 190, y + 3, 182, 17);
+    auto_.autoresizingMask = NSViewMinXMargin;
+    [c addSubview:auto_];
     NSButton *copy = [self button:@"Copy Command"
                             frame:NSMakeRect(W - 158, y - 5, 144, 32)
                            action:@selector(copySocket:) parent:c];
@@ -541,6 +553,18 @@ static const struct {
     [self column:@"info" title:@"" width:90];
     sv.documentView = table;
     [c addSubview:sv];
+
+    /* Key files can be dropped on the list. */
+    [table registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
+    [table setDraggingSourceOperationMask:NSDragOperationCopy forLocal:NO];
+    emptyHint = [NSTextField wrappingLabelWithString:
+                    @"No keys loaded.\nAdd a key, or drop .ppk key files here."];
+    emptyHint.alignment = NSTextAlignmentCenter;
+    emptyHint.textColor = NSColor.secondaryLabelColor;
+    emptyHint.frame = NSMakeRect(20, y + (H - y - 16) / 2 - 20, W - 40, 40);
+    emptyHint.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin |
+        NSViewMaxYMargin;
+    [c addSubview:emptyHint];
 
     [w center];
     [self reload];
@@ -620,6 +644,37 @@ static void keylist_callback(void *vctx, char **fingerprints,
         reenc |= r.reencryptable;
     removeButton.enabled = rows.count > 0;
     reencryptButton.enabled = reenc;
+    emptyHint.hidden = rows.count > 0;
+}
+
+/* Dropping key files on the list adds them, as Add Key would. */
+- (NSDragOperation)tableView:(NSTableView *)tv
+                validateDrop:(id<NSDraggingInfo>)info
+                 proposedRow:(NSInteger)row
+       proposedDropOperation:(NSTableViewDropOperation)op
+{
+    NSArray *urls = [info.draggingPasteboard
+        readObjectsForClasses:@[NSURL.class]
+                      options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+    if (!urls.count)
+        return NSDragOperationNone;
+    [tv setDropRow:-1 dropOperation:NSTableViewDropOn];
+    return NSDragOperationCopy;
+}
+
+- (BOOL)tableView:(NSTableView *)tv acceptDrop:(id<NSDraggingInfo>)info
+              row:(NSInteger)row dropOperation:(NSTableViewDropOperation)op
+{
+    NSArray<NSURL *> *urls = [info.draggingPasteboard
+        readObjectsForClasses:@[NSURL.class]
+                      options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+    for (NSURL *u in urls) {
+        Filename *fn = filename_from_str(u.fileSystemRepresentation);
+        add_keyfile(fn, false);
+        filename_free(fn);
+    }
+    keylist_update();
+    return urls.count > 0;
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tv
@@ -698,6 +753,7 @@ static void keylist_callback(void *vctx, char **fingerprints,
 void keylist_update(void)
 {
     [keylist reload];
+    update_status_item();
 }
 
 static void show_keylist(void)
@@ -840,10 +896,73 @@ static NSMutableArray<NSString *> *startup_keyfiles;
 @interface MTPageantApp : NSObject <NSApplicationDelegate, NSMenuDelegate>
 @end
 
+static MTPageantApp *the_app;
+
 @implementation MTPageantApp {
     NSStatusItem *statusItem;
     NSMenu *menu, *sessionMenu;
     NSMenuItem *socketItem;
+    NSMutableArray<NSMenuItem *> *keyItems;
+}
+
+/* The loaded keys, for the menu and the menu bar item. */
+static NSArray<MTKeyRow *> *current_keys(void)
+{
+    NSMutableArray<MTKeyRow *> *rows = [NSMutableArray array];
+    char *errmsg = NULL;
+    pageant_enum_keys(keylist_callback, (__bridge void *)rows, &errmsg);
+    sfree(errmsg);
+    return rows;
+}
+
+- (void)updateStatusItem
+{
+    NSUInteger n = current_keys().count;
+    statusItem.button.title = n ? [NSString stringWithFormat:@"%lu",
+                                   (unsigned long)n] : @"";
+    statusItem.button.imagePosition = n ? NSImageLeft : NSImageOnly;
+    statusItem.button.toolTip = [NSString stringWithFormat:
+        @"Pageant (PuTTY authentication agent): %lu key%s loaded",
+        (unsigned long)n, n == 1 ? "" : "s"];
+}
+
+/* The top of the menu: how many keys there are, and which. */
+- (void)updateKeyItems
+{
+    for (NSMenuItem *it in keyItems)
+        [menu removeItem:it];
+    keyItems = [NSMutableArray array];
+    NSArray<MTKeyRow *> *keys = current_keys();
+    NSString *head = keys.count == 1 ? @"Pageant · 1 key loaded" :
+        [NSString stringWithFormat:@"Pageant · %lu keys loaded",
+         (unsigned long)keys.count];
+    NSMenuItem *h;
+    if (@available(macOS 14.0, *)) {
+        h = [NSMenuItem sectionHeaderWithTitle:head];
+    } else {
+        h = [[NSMenuItem alloc] initWithTitle:head action:NULL
+                                keyEquivalent:@""];
+        h.enabled = NO;
+    }
+    [keyItems addObject:h];
+    for (MTKeyRow *r in keys) {
+        NSString *fp = r.fingerprint.length > 16 ?
+            [[r.fingerprint substringToIndex:16]
+                stringByAppendingString:@"…"] : r.fingerprint;
+        NSMenuItem *it = [[NSMenuItem alloc]
+            initWithTitle:r.comment.length ? r.comment : r.alg
+                   action:@selector(viewKeys:) keyEquivalent:@""];
+        it.target = self;
+        NSString *detail = [NSString stringWithFormat:@"%@ · %@", r.alg, fp];
+        if (@available(macOS 14.4, *))
+            it.subtitle = detail;
+        else
+            it.toolTip = detail;
+        [keyItems addObject:it];
+    }
+    [keyItems addObject:[NSMenuItem separatorItem]];
+    for (NSUInteger i = 0; i < keyItems.count; i++)
+        [menu insertItem:keyItems[i] atIndex:i];
 }
 
 - (void)buildStatusMenu
@@ -929,6 +1048,7 @@ static NSMutableArray<NSString *> *startup_keyfiles;
         }
         get_sesslist(&sl, false);
     } else if (m == menu) {
+        [self updateKeyItems];
         socketItem.title = [@"SSH_AUTH_SOCK: "
                             stringByAppendingString:display_path(
                                 agent_path())];
@@ -1002,6 +1122,7 @@ static NSMutableArray<NSString *> *startup_keyfiles;
     }
 
     [self buildStatusMenu];
+    the_app = self;
 
     /* Load any keys provided on the command line. */
     for (NSString *f in startup_keyfiles) {
@@ -1036,6 +1157,11 @@ static NSMutableArray<NSString *> *startup_keyfiles;
 }
 
 @end
+
+static void update_status_item(void)
+{
+    [the_app updateStatusItem];
+}
 
 /* ----------------------------------------------------------------------
  * Command line, as Windows Pageant's: key files to load, optionally

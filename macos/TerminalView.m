@@ -385,7 +385,7 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
     CGContextRef ctx = NSGraphicsContext.currentContext.CGContext;
     if (!backing) {
         [[self defaultBackgroundColour] setFill];
-        NSRectFill(rect);
+        NSRectFill(NSIntersectionRect(rect, self.bounds));
         return;
     }
     CGImageRef image = CGBitmapContextCreateImage(backing);

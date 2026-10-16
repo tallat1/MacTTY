@@ -25,7 +25,14 @@ kayıtlı oturum biçimi PuTTY ile birebir aynıdır.
   to Clipboard, Clear Scrollback, Reset Terminal, Full Screen) hem menü
   çubuğunda hem terminalde Ctrl+tıkla açılan menüde.
 - **Güvenlik uyarıları:** host key, zayıf şifre ve log dosyası soruları
-  PuTTY'nin kendi metinleriyle.
+  PuTTY'nin kendi metinleriyle; host ve parmak izi ayrı kutularda, parmak
+  izi tek tıkla kopyalanır, "More info" yerinde açılır.
+- **Mac'e özgü kolaylıklar:** seri hat listesi takılı portları cihaz
+  adıyla gösterir (ör. `FT232R USB UART · FTDI`); host listesinde son
+  bağlanılan host'lar; Session › Open Recent ve Dock menüsünde son ve
+  kayıtlı oturumlar (Windows PuTTY'deki Jump List'in karşılığı); oturum
+  bitince başlıkta "(inactive)" ve altta Restart Session / Close bandı;
+  boş host ile Open'a basınca neyin eksik olduğu yazılır.
 - **MacTTYgen (PuTTYgen):** anahtar üretici; PuTTYgen penceresinin Key /
   Actions / Parameters kutuları, File / Key / Conversions menüleri,
   fareyle rastgelelik toplama, PPK kayıt parametreleri, OpenSSH ve
@@ -146,8 +153,6 @@ yeniden uygulamak yeterlidir (`git log -p putty/unix/platform.h`).
 
 ## Henüz olmayanlar
 
-- "When window is resized: Change the size of the font" seçeneği
-  (satır/sütun değiştirme çalışıyor).
 - Uzaktan yazdırma denenmedi.
 
 ## Lisans

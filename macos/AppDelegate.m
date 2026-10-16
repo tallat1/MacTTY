@@ -137,10 +137,17 @@ static bool do_cmdline(int argc, char **argv, bool do_everything, Conf *conf)
 static void after_initial_config(void *vctx, int result)
 {
     Conf *conf = (Conf *)vctx;
-    if (result > 0)
-        [MTSession openSessionWithConf:conf];
-    else
+    char *name = mactty_config_box_saved_name();
+    if (result > 0) {
+        /* Remember the session by its saved name if it was loaded from
+         * one (and still goes to the same place). */
+        NSString *saved = mactty_saved_session_matches(name, conf) ?
+            @(name) : nil;
+        [MTSession openSessionWithConf:conf savedSession:saved];
+    } else {
         conf_free(conf);
+    }
+    sfree(name);
 }
 
 static void open_config_box(Conf *conf)
@@ -176,7 +183,7 @@ NSMenu *mactty_saved_sessions_menu(void)
 }
 
 @implementation MTAppDelegate {
-    NSMenu *savedSessionsMenu;
+    NSMenu *savedSessionsMenu, *recentMenu;
     NSMenu *specialsMenu;
     NSMenuItem *specialsItem;
 }
@@ -194,9 +201,84 @@ NSMenu *mactty_saved_sessions_menu(void)
     Conf *conf = conf_new();
     do_defaults(name.UTF8String, conf);
     if (conf_launchable(conf))
-        [MTSession openSessionWithConf:conf];
+        [MTSession openSessionWithConf:conf savedSession:name];
     else
         open_config_box(conf);
+}
+
+- (IBAction)openRecentSession:(NSMenuItem *)sender
+{
+    NSDictionary *e = sender.representedObject;
+    Conf *conf = mactty_conf_for_recent(e);
+    if (conf_launchable(conf))
+        [MTSession openSessionWithConf:conf savedSession:e[@"saved"]];
+    else
+        open_config_box(conf);
+}
+
+- (IBAction)clearRecentSessions:(id)sender
+{
+    mactty_clear_recent_sessions();
+}
+
+/* The recent sessions, most recent first, as menu items. */
+- (NSArray<NSMenuItem *> *)recentSessionItems
+{
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSDictionary *e in mactty_recent_sessions()) {
+        NSMenuItem *it = [[NSMenuItem alloc]
+            initWithTitle:mactty_recent_title(e)
+                   action:@selector(openRecentSession:) keyEquivalent:@""];
+        it.target = self;
+        it.representedObject = e;
+        NSString *detail = mactty_recent_detail(e);
+        if (@available(macOS 14.4, *))
+            it.subtitle = detail;
+        else
+            it.toolTip = detail;
+        [items addObject:it];
+    }
+    return items;
+}
+
+static NSMenuItem *section_header(NSString *title)
+{
+    if (@available(macOS 14.0, *))
+        return [NSMenuItem sectionHeaderWithTitle:title];
+    NSMenuItem *it = [[NSMenuItem alloc] initWithTitle:title action:NULL
+                                         keyEquivalent:@""];
+    it.enabled = NO;
+    return it;
+}
+
+/* The Dock menu: recent and saved sessions, as Windows PuTTY's jump
+ * list has them, and the companion tools. */
+- (NSMenu *)applicationDockMenu:(NSApplication *)sender
+{
+    NSMenu *m = [[NSMenu alloc] initWithTitle:@""];
+    NSArray *recent = [self recentSessionItems];
+    if (recent.count) {
+        [m addItem:section_header(@"Recent Sessions")];
+        for (NSMenuItem *it in recent)
+            [m addItem:it];
+        [m addItem:[NSMenuItem separatorItem]];
+    }
+    NSMenu *saved = mactty_saved_sessions_menu();
+    if (saved.numberOfItems && saved.itemArray.firstObject.action) {
+        [m addItem:section_header(@"Saved Sessions")];
+        for (NSMenuItem *it in [saved.itemArray copy]) {
+            [saved removeItem:it];
+            [m addItem:it];
+        }
+        [m addItem:[NSMenuItem separatorItem]];
+    }
+    [m addItemWithTitle:@"New Session..." action:@selector(newSession:)
+          keyEquivalent:@""].target = self;
+    [m addItemWithTitle:@"Pageant" action:@selector(openPageant:)
+          keyEquivalent:@""].target = self;
+    [m addItemWithTitle:@"MacTTYgen" action:@selector(openKeyGenerator:)
+          keyEquivalent:@""].target = self;
+    return m;
 }
 
 - (IBAction)showAbout:(id)sender
@@ -324,6 +406,10 @@ static NSMenuItem *add_item(NSMenu *m, NSString *title, SEL action,
     savedSessionsMenu.delegate = self;
     [sess addItemWithTitle:@"Saved Sessions" action:NULL keyEquivalent:@""]
         .submenu = savedSessionsMenu;
+    recentMenu = [[NSMenu alloc] initWithTitle:@"Open Recent"];
+    recentMenu.delegate = self;
+    [sess addItemWithTitle:@"Open Recent" action:NULL keyEquivalent:@""]
+        .submenu = recentMenu;
     [sess addItem:[NSMenuItem separatorItem]];
     add_item(sess, @"Change Settings...", @selector(changeSettings:),
              @",", cmd);
@@ -392,6 +478,23 @@ static NSMenuItem *add_item(NSMenu *m, NSString *title, SEL action,
 
 - (void)menuNeedsUpdate:(NSMenu *)menu
 {
+    if (menu == recentMenu) {
+        [menu removeAllItems];
+        NSArray *items = [self recentSessionItems];
+        for (NSMenuItem *it in items)
+            [menu addItem:it];
+        if (!items.count) {
+            NSMenuItem *it = [menu addItemWithTitle:@"(No recent sessions)"
+                                             action:NULL keyEquivalent:@""];
+            it.enabled = NO;
+        } else {
+            [menu addItem:[NSMenuItem separatorItem]];
+            [menu addItemWithTitle:@"Clear Menu"
+                            action:@selector(clearRecentSessions:)
+                     keyEquivalent:@""].target = self;
+        }
+        return;
+    }
     if (menu == savedSessionsMenu) {
         [menu removeAllItems];
         NSMenu *fresh = mactty_saved_sessions_menu();

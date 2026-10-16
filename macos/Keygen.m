@@ -307,13 +307,42 @@ static ppk_save_parameters save_params;
 }
 @end
 
+/* The area that stands in for the key while there is none: a dashed
+ * outline, as an empty drop target is drawn. */
+@interface MTDashedView : MTKGFlippedView
+@end
+@implementation MTDashedView
+- (void)drawRect:(NSRect)r
+{
+    NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:
+                          NSInsetRect(self.bounds, 1, 1) xRadius:8 yRadius:8];
+    CGFloat dash[2] = {6, 4};
+    [p setLineDash:dash count:2 phase:0];
+    p.lineWidth = 1.5;
+    [NSColor.tertiaryLabelColor setStroke];
+    [p stroke];
+}
+@end
+
+static NSColor *group_fill_colour(void)
+{
+    return [NSColor colorWithName:@"MTGroupFill" dynamicProvider:
+        ^NSColor *(NSAppearance *a) {
+        BOOL dark = [[a bestMatchFromAppearancesWithNames:
+                         @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]]
+                        isEqualToString:NSAppearanceNameDarkAqua];
+        return dark ? [NSColor colorWithWhite:1 alpha:0.045]
+                    : [NSColor colorWithWhite:0 alpha:0.035];
+    }];
+}
+
 /* ----------------------------------------------------------------------
  * The main window.
  */
 
 static const CGFloat kWinW = 600;
-static const CGFloat kMargin = 14;
-static const CGFloat kBoxGap = 10;
+static const CGFloat kMargin = 20;
+static const CGFloat kBoxGap = 14;
 static const CGFloat kFieldH = 22;
 static const CGFloat kButtonW = 140;
 
@@ -340,6 +369,10 @@ static const CGFloat kButtonW = 140;
     id entropyMonitor;
 
     /* Key box */
+    NSTextField *keyHeader, *statusPill, *progressPercent;
+    NSView *stateArea;
+    NSButton *copyButton;
+    NSString *keyStatus;
     NSTextField *noKeyLabel, *generatingLabel;
     NSProgressIndicator *progress;
     NSTextField *pkLabel;
@@ -388,16 +421,30 @@ static NSButton *make_button(NSView *parent, NSString *title, NSRect frame,
     return b;
 }
 
-/* A titled group box at 'top' in the (flipped) window content; returns
- * its flipped content view of the requested inner height. */
+/* A group of controls at 'top' in the (flipped) window content, its
+ * title above it as in macOS settings; returns its flipped content
+ * view of the requested inner height. */
 static NSView *make_box(NSView *parent, NSString *title, CGFloat top,
-                        CGFloat innerH, CGFloat *bottom)
+                        CGFloat innerH, CGFloat *bottom,
+                        NSTextField *__strong *header)
 {
+    NSTextField *h = [NSTextField labelWithString:title];
+    h.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
+    h.textColor = NSColor.secondaryLabelColor;
+    h.frame = NSMakeRect(kMargin + 2, top, ceil(h.fittingSize.width), 16);
+    [parent addSubview:h];
+    if (header)
+        *header = h;
+    top += 22;
     NSBox *box = [[NSBox alloc] initWithFrame:
                      NSMakeRect(kMargin, top, kWinW - 2 * kMargin, 100)];
-    box.title = title;
-    box.titlePosition = NSAtTop;
-    box.contentViewMargins = NSMakeSize(10, 8);
+    box.boxType = NSBoxCustom;
+    box.titlePosition = NSNoTitle;
+    box.cornerRadius = 8;
+    box.borderWidth = 1;
+    box.borderColor = NSColor.separatorColor;
+    box.fillColor = group_fill_colour();
+    box.contentViewMargins = NSMakeSize(12, 10);
     CGFloat extra = 100 - box.contentView.frame.size.height;
     box.frame = NSMakeRect(kMargin, top, kWinW - 2 * kMargin,
                            innerH + extra);
@@ -431,17 +478,52 @@ static NSView *make_box(NSView *parent, NSString *title, CGFloat top,
     CGFloat y = kMargin, bottom;
 
     /* ---- Key ---- */
-    NSView *kb = make_box(content, @"Key", y, 228, &bottom);
+    NSView *kb = make_box(content, @"Key", y, 228, &bottom, &keyHeader);
     CGFloat cw = kb.frame.size.width;
-    noKeyLabel = make_label(kb, @"No key.", NSMakeRect(0, 2, cw, 17));
-    generatingLabel = make_label(kb, @"", NSMakeRect(0, 2, cw, 17));
+
+    /* Next to the heading: what the key is and whether it is saved. */
+    statusPill = [NSTextField labelWithString:@""];
+    statusPill.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+    statusPill.textColor = NSColor.controlAccentColor;
+    statusPill.wantsLayer = YES;
+    statusPill.layer.cornerRadius = 8;
+    statusPill.layer.backgroundColor =
+        [NSColor.controlAccentColor colorWithAlphaComponent:0.15].CGColor;
+    statusPill.alignment = NSTextAlignmentCenter;
+    [content addSubview:statusPill];
+
+    /* While there is no key: a dashed area saying what to do, which
+     * also shows the progress of generating one. */
+    stateArea = [[MTDashedView alloc] initWithFrame:NSMakeRect(0, 0, cw, 228)];
+    [kb addSubview:stateArea];
+    noKeyLabel = [NSTextField wrappingLabelWithString:
+                     @"No key yet.\nGenerate a new key pair, or load an "
+                     "existing private key file."];
+    noKeyLabel.alignment = NSTextAlignmentCenter;
+    noKeyLabel.textColor = NSColor.secondaryLabelColor;
+    noKeyLabel.frame = NSMakeRect(24, 88, cw - 48, 44);
+    [kb addSubview:noKeyLabel];
+    generatingLabel = [NSTextField wrappingLabelWithString:@""];
+    generatingLabel.alignment = NSTextAlignmentCenter;
+    generatingLabel.frame = NSMakeRect(24, 70, cw - 48, 44);
+    [kb addSubview:generatingLabel];
     progress = [[NSProgressIndicator alloc]
-                   initWithFrame:NSMakeRect(0, 26, cw, 20)];
+                   initWithFrame:NSMakeRect(24, 132, cw - 48 - 52, 20)];
     progress.style = NSProgressIndicatorStyleBar;
     progress.indeterminate = NO;
     [kb addSubview:progress];
+    progressPercent = [NSTextField labelWithString:@""];
+    progressPercent.alignment = NSTextAlignmentRight;
+    progressPercent.font = [NSFont monospacedDigitSystemFontOfSize:
+                               NSFont.systemFontSize weight:NSFontWeightRegular];
+    progressPercent.frame = NSMakeRect(cw - 24 - 48, 133, 48, 17);
+    [kb addSubview:progressPercent];
 
-    pkLabel = make_label(kb, @"", NSMakeRect(0, 2, cw, 17));
+    pkLabel = make_label(kb, @"", NSMakeRect(0, 2, cw - 80, 17));
+    copyButton = make_button(kb, @"Copy", NSMakeRect(cw - 72, -4, 72, 28),
+                             self, @selector(copyPublicKey:));
+    copyButton.controlSize = NSControlSizeSmall;
+    copyButton.toolTip = @"Copy the public key";
     keyScroll = [[NSScrollView alloc]
                     initWithFrame:NSMakeRect(0, 22, cw, 86)];
     keyScroll.borderType = NSBezelBorder;
@@ -501,7 +583,7 @@ static NSView *make_box(NSView *parent, NSString *title, CGFloat top,
 
     /* ---- Actions ---- */
     y = bottom + kBoxGap;
-    NSView *ab = make_box(content, @"Actions", y, 92, &bottom);
+    NSView *ab = make_box(content, @"Actions", y, 92, &bottom, NULL);
     CGFloat bx = cw - kButtonW + 6;
     make_label(ab, @"Generate a public/private key pair",
                NSMakeRect(0, 7, cw - kButtonW, 17));
@@ -523,7 +605,7 @@ static NSView *make_box(NSView *parent, NSString *title, CGFloat top,
 
     /* ---- Parameters ---- */
     y = bottom + kBoxGap;
-    NSView *pb = make_box(content, @"Parameters", y, 78, &bottom);
+    NSView *pb = make_box(content, @"Parameters", y, 78, &bottom, NULL);
     make_label(pb, @"Type of key to generate:", NSMakeRect(0, 2, cw, 17));
     /* The radio buttons get a container of their own, so that AppKit
      * treats them as one group and nothing else joins it. */
@@ -616,7 +698,56 @@ static void hide_views(NSArray<NSView *> *views, BOOL hide)
 
 - (NSArray<NSView *> *)gotKeyConditionalViews
 {
-    return @[pkLabel, keyScroll, certLabel, certInfoButton];
+    return @[pkLabel, keyScroll, copyButton, certLabel, certInfoButton];
+}
+
+/* The pill beside "Key": the key's type and what has become of it. */
+- (void)updatePill
+{
+    NSString *text = nil;
+    if (keyExists && keyStatus) {
+        NSString *alg = @"SSH-1 RSA";
+        if (ssh2 && ssh2key.key) {
+            char *d = ssh_keyalg_desc(ssh_key_alg(ssh2key.key));
+            alg = mt_ns(d);
+            sfree(d);
+        }
+        text = [NSString stringWithFormat:@"%@ · %@", alg, keyStatus];
+    } else if ([keyStatus isEqualToString:@"generating"]) {
+        text = @"Generating…";
+    }
+    statusPill.hidden = (text == nil);
+    if (!text)
+        return;
+    statusPill.stringValue = text;
+    NSRect h = keyHeader.frame;
+    CGFloat w = ceil(statusPill.fittingSize.width) + 16;
+    statusPill.frame = NSMakeRect(NSMaxX(h) + 8, h.origin.y, w, 16);
+}
+
+/* Return goes to the thing to do next: Generate while there is no key,
+ * Save private key while a new one is unsaved. */
+- (void)updateDefaultButton
+{
+    BOOL unsaved = keyExists && [keyStatus isEqualToString:@"not saved"];
+    generateButton.keyEquivalent = (!keyExists && !generating) ? @"\r" : @"";
+    saveButton.keyEquivalent = unsaved ? @"\r" : @"";
+}
+
+- (void)updatePercent
+{
+    double span = progress.maxValue - progress.minValue;
+    double f = span > 0 ? (progress.doubleValue - progress.minValue) / span
+                        : 0;
+    progressPercent.stringValue = [NSString stringWithFormat:@"%d%%",
+                                   (int)lround(MAX(0, MIN(1, f)) * 100)];
+}
+
+- (IBAction)copyPublicKey:(id)sender
+{
+    NSPasteboard *pb = mt_pasteboard();
+    [pb clearContents];
+    [pb setString:keyText.string forType:NSPasteboardTypeString];
 }
 
 /* 0: no key; 1: generating; 2: got a key. Menu items follow in
@@ -625,7 +756,11 @@ static void hide_views(NSArray<NSView *> *views, BOOL hide)
 {
     BOOL busy = (status == 1);
     noKeyLabel.hidden = (status != 0);
-    hide_views(@[generatingLabel, progress], status != 1);
+    stateArea.hidden = (status == 2);
+    hide_views(@[generatingLabel, progress, progressPercent], status != 1);
+    if (status != 2)
+        keyStatus = (status == 1) ? @"generating" : nil;
+    [self updatePill];
     hide_views([self gotKeyViews], status != 2);
     if (status != 2)
         hide_views([self gotKeyConditionalViews], YES);
@@ -634,6 +769,7 @@ static void hide_views(NSArray<NSView *> *views, BOOL hide)
     loadButton.enabled = !busy;
     saveButton.enabled = (status == 2);
     savePubButton.enabled = (status == 2);
+    [self updateDefaultButton];
     for (NSButton *r in typeRadios)
         r.enabled = !busy;
     bitsField.enabled = !busy;
@@ -688,13 +824,13 @@ static void hide_views(NSArray<NSView *> *views, BOOL hide)
 {
     if (ssh2 && ssh_key_alg(ssh2key.key)->is_certificate) {
         hide_views(@[certLabel, certInfoButton], NO);
-        hide_views(@[pkLabel, keyScroll], YES);
+        hide_views(@[pkLabel, keyScroll, copyButton], YES);
         certLabel.stringValue =
             @"This public key contains an OpenSSH certificate.";
         return;
     }
     hide_views(@[certLabel, certInfoButton], YES);
-    hide_views(@[pkLabel, keyScroll], NO);
+    hide_views(@[pkLabel, keyScroll, copyButton], NO);
     char *buffer;
     if (ssh2) {
         pkLabel.stringValue = @"Public key for pasting into OpenSSH "
@@ -766,6 +902,9 @@ static void hide_views(NSArray<NSView *> *views, BOOL hide)
 
     [self setUIState:2];
     keyExists = YES;
+    keyStatus = @"loaded";
+    [self updatePill];
+    [self updateDefaultButton];
 }
 
 /* -------- loading (load_key_file) -------- */
@@ -984,9 +1123,15 @@ static Filename *request_file(NSString *message, bool save, bool keyfiles)
                 ret = rsa1_save_f(fn, &key,
                                   *passphrase ? passphrase : NULL);
         }
-        if (!ret)
+        if (!ret) {
             mt_error_box(kErrorTitle,
                          err ? mt_ns(err) : @"Unable to save key file");
+        } else if (type == 0 || type == SSH_KEYTYPE_SSH2 ||
+                   type == SSH_KEYTYPE_SSH1) {
+            keyStatus = @"saved";
+            [self updatePill];
+            [self updateDefaultButton];
+        }
         sfree(err);
         filename_free(fn);
     }
@@ -1290,6 +1435,7 @@ static uint64_t now_ms(void)
     progress.minValue = 0;
     progress.maxValue = entropyRequired;
     progress.doubleValue = 0;
+    [self updatePercent];
 }
 
 - (void)mouseMovedForEntropy:(NSEvent *)event
@@ -1315,6 +1461,7 @@ static uint64_t now_ms(void)
         entropyPrevMs = wallclock;
     }
     progress.doubleValue = entropyGot;
+    [self updatePercent];
     if (entropyGot >= entropyRequired) {
         /* Seed the entropy pool */
         random_reseed(ptrlen_from_strbuf(entropy));
@@ -1332,6 +1479,7 @@ static uint64_t now_ms(void)
     progress.minValue = 0;
     progress.maxValue = 1;
     progress.doubleValue = 0;
+    [self updatePercent];
 
     struct keygen_job *j = snew(struct keygen_job);
     memset(j, 0, sizeof(*j));
@@ -1367,6 +1515,7 @@ static uint64_t now_ms(void)
         MTKeygen *s = weakSelf;
         if (s && s->job)
             s->progress.doubleValue = atomic_load(&s->job->prog.position);
+            [s updatePercent];
     }];
 
     NSThread *thread = [[NSThread alloc] initWithBlock:^{
@@ -1438,6 +1587,9 @@ static uint64_t now_ms(void)
 
     [self setupBigEdit];
     [self setUIState:2];
+    keyStatus = @"not saved";
+    [self updatePill];
+    [self updateDefaultButton];
 }
 
 /* -------- other commands -------- */

@@ -28,24 +28,50 @@ static MTControlBox *box_of(dlgparam *dp)
     return (__bridge MTControlBox *)dp->box;
 }
 
-/* Metrics for small controls, which keep the panels as compact as
- * PuTTY's own. */
-static const CGFloat kMargin = 12;
-static const CGFloat kTreeWidth = 168;
-static const CGFloat kPanelWidth = 410;
-static const CGFloat kRowGap = 5;
-static const CGFloat kColGap = 10;
-static const CGFloat kSetGap = 8;
-static const CGFloat kLabelH = 14;
-static const CGFloat kFieldH = 19;
-static const CGFloat kCheckH = 16;
-static const CGFloat kButtonH = 20;
-static const CGFloat kListRowH = 16;
-static const CGFloat kSideButtonW = 76;
+/* Metrics for regular-size controls, on a 4 pt grid. */
+static const CGFloat kMargin = 20;
+static const CGFloat kTreeWidth = 196;
+static const CGFloat kPanelWidth = 520;
+static const CGFloat kRowGap = 8;
+static const CGFloat kColGap = 12;
+static const CGFloat kSetGap = 16;
+static const CGFloat kLabelH = 17;
+static const CGFloat kFieldH = 22;
+static const CGFloat kCheckH = 18;
+static const CGFloat kButtonH = 24;
+static const CGFloat kListRowH = 20;
+static const CGFloat kSideButtonW = 96;
+static const CGFloat kHeaderH = 16;
 
-static NSFont *small_font(void)
+static NSFont *ui_font(void)
 {
-    return [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+    return [NSFont systemFontOfSize:NSFont.systemFontSize];
+}
+
+/* The background of a group of controls: a shade lighter than the
+ * window in dark mode, a shade darker in light mode. */
+static NSColor *group_fill_colour(void)
+{
+    return [NSColor colorWithName:@"MTGroupFill" dynamicProvider:
+        ^NSColor *(NSAppearance *a) {
+        BOOL dark = [[a bestMatchFromAppearancesWithNames:
+                         @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]]
+                        isEqualToString:NSAppearanceNameDarkAqua];
+        return dark ? [NSColor colorWithWhite:1 alpha:0.045]
+                    : [NSColor colorWithWhite:0 alpha:0.035];
+    }];
+}
+
+/* Place a button or pop-up so that its visible bezel, not its frame,
+ * sits centred in a row of height rowh at (x, y). */
+static void place_aligned(NSView *v, CGFloat x, CGFloat y, CGFloat w,
+                          CGFloat rowh)
+{
+    CGFloat h = v.fittingSize.height;
+    if (h <= 0 || h > rowh + 10)
+        h = rowh;
+    v.frame = [v frameForAlignmentRect:
+                  NSMakeRect(x, y + floor((rowh - h) / 2), w, h)];
 }
 
 static NSString *ns_string(const char *s)
@@ -86,6 +112,16 @@ static NSString *ns_string(const char *s)
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *ids;
 @property (nonatomic, copy) NSString *fontSpec;
 @property (nonatomic) CGFloat top;
+/* An edit box with a list has both a plain field and a combo box, and
+ * shows the combo box only while the list has something in it. */
+@property (nonatomic, strong) NSTextField *plainField;
+/* For combo boxes: the value each item puts in the box (an item added
+ * as "value\tdescription" shows both but enters only the value). */
+@property (nonatomic, strong) NSMutableArray<NSString *> *values;
+/* The controlset the control belongs to (its boxname). */
+@property (nonatomic, copy) NSString *setName;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *details;
+- (void)setListShown:(BOOL)shown;
 @end
 
 @interface MTControlBox : NSWindowController <NSWindowDelegate,
@@ -106,6 +142,8 @@ static NSString *ns_string(const char *s)
 - (void)beginFileSelectFor:(MTCtrl *)uc;
 - (void)beginFontSelectFor:(MTCtrl *)uc;
 - (void)noteFocusOn:(dlgcontrol *)ctrl;
+- (void)refreshList:(dlgcontrol *)ctrl;
+- (void)explainIfNotLaunchable;
 @property (nonatomic, readonly) NSInteger currentPanel;
 @end
 
@@ -119,6 +157,8 @@ static NSString *ns_string(const char *s)
 - (void)buttonPressed:(id)sender
 {
     [self.box fire:self.ctrl event:EVENT_ACTION];
+    if (self.ctrl->button.isdefault)
+        [self.box explainIfNotLaunchable];
 }
 
 - (void)radioPressed:(NSButton *)sender
@@ -187,9 +227,39 @@ static NSString *ns_string(const char *s)
 - (void)comboBoxSelectionDidChange:(NSNotification *)n
 {
     /* The combo box's text is updated only after this notification. */
+    NSInteger idx = self.combo.indexOfSelectedItem;
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (idx >= 0 && idx < (NSInteger)self.values.count)
+            self.combo.stringValue = self.values[idx];
         [self.box fire:self.ctrl event:EVENT_VALCHANGE];
     });
+}
+
+- (void)comboBoxWillPopUp:(NSNotification *)n
+{
+    /* Serial ports come and go: look again each time the list opens. */
+    [self.box refreshList:self.ctrl];
+}
+
+- (void)setListShown:(BOOL)shown
+{
+    if (!self.combo || !self.plainField)
+        return;
+    NSTextField *from = self.field;
+    NSTextField *to = shown ? self.combo : self.plainField;
+    if (from == to)
+        return;
+    BOOL focused = (from.currentEditor != nil);
+    to.stringValue = from.stringValue;
+    to.hidden = NO;
+    from.hidden = YES;
+    self.field = to;
+    self.view = to;
+    if (focused) {
+        [to.window makeFirstResponder:to];
+        NSText *ed = to.currentEditor;
+        ed.selectedRange = NSMakeRange(to.stringValue.length, 0);
+    }
 }
 
 /* Table data source / delegate */
@@ -203,6 +273,18 @@ static NSString *ns_string(const char *s)
             row:(NSInteger)row
 {
     NSString *item = self.items[row];
+    if ([col.identifier isEqualToString:@"detail"]) {
+        if (!self.details)
+            self.details = [NSMutableDictionary dictionary];
+        NSString *d = self.details[item];
+        if (!d) {
+            char *cd = mactty_saved_session_detail(item.UTF8String);
+            d = cd ? ns_string(cd) : @"";
+            sfree(cd);
+            self.details[item] = d;
+        }
+        return d;
+    }
     NSInteger idx = [tv.tableColumns indexOfObject:col];
     if (tv.tableColumns.count == 1)
         return item;
@@ -239,6 +321,14 @@ static NSString *ns_string(const char *s)
 @end
 
 static NSMutableSet<MTControlBox *> *open_boxes;
+static char *last_saved_name;
+
+char *mactty_config_box_saved_name(void)
+{
+    char *ret = last_saved_name;
+    last_saved_name = NULL;
+    return ret;
+}
 
 @implementation MTControlBox {
     NSMapTable<NSValue *, MTCtrl *> *uctrls;
@@ -252,6 +342,8 @@ static NSMutableSet<MTControlBox *> *open_boxes;
     int retval;
     BOOL ended, midsession, isConfig;
     MTCtrl *fontCtrl;
+    dlgcontrol *hostCtrl, *savedNameCtrl;
+    NSTextField *validationLabel;
     dlgcontrol *colourCtrl;
     int colourR, colourG, colourB;
     BOOL colourOK;
@@ -268,7 +360,15 @@ static NSMutableSet<MTControlBox *> *open_boxes;
 {
     if (suppress || ended || !ctrl || !ctrl->handler)
         return;
+    if (ctrl == hostCtrl && event == EVENT_VALCHANGE)
+        validationLabel.hidden = YES;
     ctrl->handler(ctrl, &dp, data, event);
+}
+
+- (void)refreshList:(dlgcontrol *)ctrl
+{
+    if (!ended && ctrl && ctrl->handler)
+        dlg_refresh(ctrl, &dp);
 }
 
 - (void)noteFocusOn:(dlgcontrol *)ctrl
@@ -288,7 +388,7 @@ static NSMutableSet<MTControlBox *> *open_boxes;
 - (NSTextField *)makeLabel:(const char *)text
 {
     NSTextField *l = [NSTextField labelWithString:ns_string(text)];
-    l.font = small_font();
+    l.font = ui_font();
     l.lineBreakMode = NSLineBreakByTruncatingTail;
     return l;
 }
@@ -298,8 +398,8 @@ static NSMutableSet<MTControlBox *> *open_boxes;
 {
     NSButton *b = [NSButton buttonWithTitle:ns_string(title)
                                      target:target action:action];
-    b.controlSize = NSControlSizeSmall;
-    b.font = small_font();
+    b.controlSize = NSControlSizeRegular;
+    b.font = ui_font();
     b.bezelStyle = NSBezelStyleRounded;
     return b;
 }
@@ -311,22 +411,33 @@ static NSMutableSet<MTControlBox *> *open_boxes;
                     x:(CGFloat)x y:(CGFloat)y width:(CGFloat)w
                    in:(NSView *)parent
 {
+    BOOL bezel = [widget isKindOfClass:NSPopUpButton.class] ||
+        [widget isKindOfClass:NSComboBox.class];
     if (!label) {
-        widget.frame = NSMakeRect(x, y, w, h);
+        if (bezel)
+            place_aligned(widget, x, y, w, h);
+        else
+            widget.frame = NSMakeRect(x, y, w, h);
         [parent addSubview:widget];
         return h;
     }
     if (pct >= 100 || pct <= 0) {
         label.frame = NSMakeRect(x, y, w, kLabelH);
-        widget.frame = NSMakeRect(x, y + kLabelH + 2, w, h);
+        if (bezel)
+            place_aligned(widget, x, y + kLabelH + 4, w, h);
+        else
+            widget.frame = NSMakeRect(x, y + kLabelH + 4, w, h);
         [parent addSubview:label];
         [parent addSubview:widget];
-        return kLabelH + 2 + h;
+        return kLabelH + 4 + h;
     }
     CGFloat ww = floor(w * pct / 100.0);
-    label.frame = NSMakeRect(x, y + floor((h - kLabelH) / 2), w - ww - 4,
+    label.frame = NSMakeRect(x, y + floor((h - kLabelH) / 2), w - ww - 6,
                              kLabelH);
-    widget.frame = NSMakeRect(x + w - ww, y, ww, h);
+    if (bezel)
+        place_aligned(widget, x + w - ww, y, ww, h);
+    else
+        widget.frame = NSMakeRect(x + w - ww, y, ww, h);
     [parent addSubview:label];
     [parent addSubview:widget];
     return h;
@@ -341,7 +452,7 @@ static NSMutableSet<MTControlBox *> *open_boxes;
       case CTRL_TEXT: {
         NSTextField *t = [NSTextField wrappingLabelWithString:
                                          ns_string(ctrl->label)];
-        t.font = small_font();
+        t.font = ui_font();
         t.selectable = NO;
         NSSize sz = [t.cell cellSizeForBounds:NSMakeRect(0, 0, w, 10000)];
         t.frame = NSMakeRect(x, y, w, ceil(sz.height));
@@ -353,30 +464,40 @@ static NSMutableSet<MTControlBox *> *open_boxes;
       case CTRL_EDITBOX: {
         NSTextField *label = ctrl->label ? [self makeLabel:ctrl->label] : nil;
         NSTextField *field;
-        if (ctrl->editbox.has_list) {
-            NSComboBox *combo = [[NSComboBox alloc] initWithFrame:NSZeroRect];
-            combo.usesDataSource = NO;
-            combo.completes = NO;
-            combo.numberOfVisibleItems = 12;
-            uc.combo = combo;
-            field = combo;
-        } else if (ctrl->editbox.password) {
+        if (ctrl->editbox.password)
             field = [[NSSecureTextField alloc] initWithFrame:NSZeroRect];
-        } else {
+        else
             field = [[NSTextField alloc] initWithFrame:NSZeroRect];
-        }
-        field.controlSize = NSControlSizeSmall;
-        field.font = small_font();
+        field.controlSize = NSControlSizeRegular;
+        field.font = ui_font();
         field.delegate = uc;
         field.cell.scrollable = YES;
         field.cell.wraps = NO;
         uc.label = label;
         uc.field = field;
         uc.view = field;
-        CGFloat h = ctrl->editbox.has_list ? kFieldH + 2 : kFieldH;
-        return [self placeLabel:label widget:field
-                            pct:ctrl->editbox.percentwidth height:h
-                              x:x y:y width:w in:parent];
+        CGFloat h = [self placeLabel:label widget:field
+                                 pct:ctrl->editbox.percentwidth
+                              height:kFieldH x:x y:y width:w in:parent];
+        if (ctrl->editbox.has_list) {
+            NSComboBox *combo = [[NSComboBox alloc] initWithFrame:NSZeroRect];
+            combo.usesDataSource = NO;
+            combo.completes = NO;
+            combo.numberOfVisibleItems = 12;
+            combo.controlSize = NSControlSizeRegular;
+            combo.font = ui_font();
+            combo.delegate = uc;
+            combo.cell.scrollable = YES;
+            NSRect f = field.frame;
+            place_aligned(combo, f.origin.x, f.origin.y, f.size.width,
+                          f.size.height);
+            combo.hidden = YES;
+            [parent addSubview:combo];
+            uc.combo = combo;
+            uc.plainField = field;
+            uc.values = [NSMutableArray array];
+        }
+        return h;
       }
 
       case CTRL_RADIO: {
@@ -386,14 +507,14 @@ static NSMutableSet<MTControlBox *> *open_boxes;
             label.frame = NSMakeRect(x, y, w, kLabelH);
             [parent addSubview:label];
             uc.label = label;
-            h += kLabelH + 2;
+            h += kLabelH + 4;
         }
         /* Each radio group gets its own container, because AppKit
          * groups radio buttons that share a superview and action. */
         int ncols = ctrl->radio.ncolumns > 0 ? ctrl->radio.ncolumns : 1;
         int nrows = (ctrl->radio.nbuttons + ncols - 1) / ncols;
         MTFlippedView *group = [[MTFlippedView alloc] initWithFrame:
-            NSMakeRect(x, y + h, w, nrows * (kCheckH + 2))];
+            NSMakeRect(x, y + h, w, nrows * (kCheckH + 4))];
         uc.radios = [NSMutableArray array];
         CGFloat natural[16] = {0};
         if (ncols > 16) ncols = 16;
@@ -402,8 +523,8 @@ static NSMutableSet<MTControlBox *> *open_boxes;
                                         ns_string(ctrl->radio.buttons[i])
                                                    target:uc
                                                    action:@selector(radioPressed:)];
-            b.controlSize = NSControlSizeSmall;
-            b.font = small_font();
+            b.controlSize = NSControlSizeRegular;
+            b.font = ui_font();
             int c = i % ncols;
             natural[c] = MAX(natural[c], ceil(b.fittingSize.width) + 4);
             [uc.radios addObject:b];
@@ -426,22 +547,22 @@ static NSMutableSet<MTControlBox *> *open_boxes;
         }
         for (int i = 0; i < ctrl->radio.nbuttons; i++) {
             int r = i / ncols, c = i % ncols;
-            uc.radios[i].frame = NSMakeRect(colx[c], r * (kCheckH + 2),
+            uc.radios[i].frame = NSMakeRect(colx[c], r * (kCheckH + 4),
                                             colx[c + 1] - colx[c] - 2,
                                             kCheckH);
             [group addSubview:uc.radios[i]];
         }
         [parent addSubview:group];
         uc.view = group;
-        return h + nrows * (kCheckH + 2) - 2;
+        return h + nrows * (kCheckH + 4) - 4;
       }
 
       case CTRL_CHECKBOX: {
         NSButton *b = [NSButton checkboxWithTitle:ns_string(ctrl->label)
                                            target:uc
                                            action:@selector(valueChanged:)];
-        b.controlSize = NSControlSizeSmall;
-        b.font = small_font();
+        b.controlSize = NSControlSizeRegular;
+        b.font = ui_font();
         b.frame = NSMakeRect(x, y, w, kCheckH);
         [parent addSubview:b];
         uc.button = b;
@@ -456,7 +577,7 @@ static NSMutableSet<MTControlBox *> *open_boxes;
             b.keyEquivalent = @"\r";
         else if (ctrl->button.iscancel)
             b.keyEquivalent = @"\033";
-        b.frame = NSMakeRect(x - 4, y - 1, w + 8, kButtonH + 4);
+        place_aligned(b, x, y, w, kButtonH);
         [parent addSubview:b];
         uc.button = b;
         uc.view = b;
@@ -472,8 +593,8 @@ static NSMutableSet<MTControlBox *> *open_boxes;
                                              : nil;
             NSPopUpButton *p = [[NSPopUpButton alloc] initWithFrame:NSZeroRect
                                                           pullsDown:NO];
-            p.controlSize = NSControlSizeSmall;
-            p.font = small_font();
+            p.controlSize = NSControlSizeRegular;
+            p.font = ui_font();
             p.target = uc;
             p.action = @selector(popupChanged:);
             uc.popup = p;
@@ -481,7 +602,7 @@ static NSMutableSet<MTControlBox *> *open_boxes;
             uc.view = p;
             return [self placeLabel:label widget:p
                                 pct:ctrl->listbox.percentwidth
-                             height:kFieldH + 3 x:x y:y width:w in:parent];
+                             height:kButtonH x:x y:y width:w in:parent];
         }
 
         CGFloat h = 0;
@@ -490,9 +611,9 @@ static NSMutableSet<MTControlBox *> *open_boxes;
             label.frame = NSMakeRect(x, y, w, kLabelH);
             [parent addSubview:label];
             uc.label = label;
-            h += kLabelH + 2;
+            h += kLabelH + 4;
         }
-        CGFloat listw = ctrl->listbox.draglist ? w - kSideButtonW - 6 : w;
+        CGFloat listw = ctrl->listbox.draglist ? w - kSideButtonW - 8 : w;
         CGFloat listh = ctrl->listbox.height * kListRowH + 4;
         NSScrollView *sv = [[NSScrollView alloc] initWithFrame:
             NSMakeRect(x, y + h, listw, listh)];
@@ -502,9 +623,9 @@ static NSMutableSet<MTControlBox *> *open_boxes;
         sv.autohidesScrollers = YES;
         NSTableView *tv = [[NSTableView alloc] initWithFrame:sv.bounds];
         tv.headerView = nil;
-        tv.rowHeight = kListRowH - 2;
-        tv.intercellSpacing = NSMakeSize(3, 2);
-        tv.font = small_font();
+        tv.rowHeight = kListRowH - 3;
+        tv.intercellSpacing = NSMakeSize(6, 3);
+        tv.font = ui_font();
         tv.style = NSTableViewStylePlain;
         tv.usesAlternatingRowBackgroundColors = NO;
         tv.allowsMultipleSelection = ctrl->listbox.multisel != 0;
@@ -520,7 +641,23 @@ static NSMutableSet<MTControlBox *> *open_boxes;
             col.width = floor(avail * pc / 100.0);
             col.editable = NO;
             NSTextFieldCell *cell = [[NSTextFieldCell alloc] init];
-            cell.font = small_font();
+            cell.font = ui_font();
+            cell.lineBreakMode = NSLineBreakByTruncatingTail;
+            col.dataCell = cell;
+            [tv addTableColumn:col];
+        }
+        if (ncols == 1 && [uc.setName isEqualToString:@"savedsessions"]) {
+            /* What each saved session connects to, in a second column. */
+            NSTableColumn *first = tv.tableColumns.firstObject;
+            first.width = floor(avail * 0.55);
+            NSTableColumn *col = [[NSTableColumn alloc]
+                                     initWithIdentifier:@"detail"];
+            col.width = avail - first.width - 6;
+            col.editable = NO;
+            NSTextFieldCell *cell = [[NSTextFieldCell alloc] init];
+            cell.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+            cell.textColor = NSColor.secondaryLabelColor;
+            cell.alignment = NSTextAlignmentRight;
             cell.lineBreakMode = NSLineBreakByTruncatingTail;
             col.dataCell = cell;
             [tv addTableColumn:col];
@@ -539,11 +676,10 @@ static NSMutableSet<MTControlBox *> *open_boxes;
                                      action:@selector(upPressed:)];
             NSButton *down = [self makeButton:"Down" target:uc
                                        action:@selector(downPressed:)];
-            up.frame = NSMakeRect(x + w - kSideButtonW - 4, y + h - 1,
-                                  kSideButtonW + 8, kButtonH + 4);
-            down.frame = NSMakeRect(x + w - kSideButtonW - 4,
-                                    y + h + kButtonH + 4,
-                                    kSideButtonW + 8, kButtonH + 4);
+            place_aligned(up, x + w - kSideButtonW, y + h, kSideButtonW,
+                          kButtonH);
+            place_aligned(down, x + w - kSideButtonW, y + h + kButtonH + 6,
+                          kSideButtonW, kButtonH);
             [parent addSubview:up];
             [parent addSubview:down];
         }
@@ -559,38 +695,36 @@ static NSMutableSet<MTControlBox *> *open_boxes;
             label.frame = NSMakeRect(x, y, w, kLabelH);
             [parent addSubview:label];
             uc.label = label;
-            h += kLabelH + 2;
+            h += kLabelH + 4;
         }
         NSButton *b = [self makeButton:font ? "Change..." : "Browse..."
                                 target:uc
                                 action:font ? @selector(fontPressed:)
                                             : @selector(browsePressed:)];
         if (!font && ctrl->fileselect.just_button) {
-            b.frame = NSMakeRect(x - 4, y + h - 1, kSideButtonW + 8,
-                                 kButtonH + 4);
+            place_aligned(b, x, y + h, kSideButtonW, kButtonH);
             [parent addSubview:b];
             uc.button = b;
             uc.view = b;
             return h + kButtonH;
         }
         NSTextField *f = [[NSTextField alloc] initWithFrame:
-            NSMakeRect(x, y + h, w - kSideButtonW - 6, kFieldH)];
-        f.controlSize = NSControlSizeSmall;
-        f.font = small_font();
+            NSMakeRect(x, y + h + 1, w - kSideButtonW - 8, kFieldH)];
+        f.controlSize = NSControlSizeRegular;
+        f.font = ui_font();
         f.delegate = uc;
         f.cell.scrollable = YES;
         if (font) {
             f.editable = NO;
             f.selectable = YES;
         }
-        b.frame = NSMakeRect(x + w - kSideButtonW - 4, y + h - 1,
-                             kSideButtonW + 8, kButtonH + 4);
+        place_aligned(b, x + w - kSideButtonW, y + h, kSideButtonW, kButtonH);
         [parent addSubview:f];
         [parent addSubview:b];
         uc.field = f;
         uc.button = b;
         uc.view = f;
-        return h + kFieldH;
+        return h + kButtonH;
       }
     }
     return 0;
@@ -600,32 +734,38 @@ static NSMutableSet<MTControlBox *> *open_boxes;
 - (CGFloat)layoutSet:(struct controlset *)s in:(NSView *)parent
                    y:(CGFloat)y0 width:(CGFloat)width panel:(NSInteger)panel
 {
+    const CGFloat start_y = y0;
     if (!s->boxname) {
-        /* A panel title, with a rule underneath as in Windows PuTTY. */
+        /* The panel title. */
         NSTextField *t = [NSTextField labelWithString:ns_string(s->boxtitle)];
-        t.font = [NSFont boldSystemFontOfSize:NSFont.smallSystemFontSize];
-        t.frame = NSMakeRect(0, y0, width, kLabelH + 2);
+        t.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
+        t.frame = NSMakeRect(0, y0, width, 20);
         [parent addSubview:t];
-        NSBox *rule = [[NSBox alloc] initWithFrame:
-            NSMakeRect(0, y0 + kLabelH + 5, width, 1)];
-        rule.boxType = NSBoxSeparator;
-        [parent addSubview:rule];
-        return kLabelH + 8;
+        return 24;
     }
 
     NSView *target = parent;
     CGFloat innerX = 0, innerW = width, y = y0;
     NSBox *frame = nil;
+    if (*s->boxname && s->boxtitle && *s->boxtitle) {
+        /* A group's title sits above it, as in macOS settings. */
+        NSTextField *t = [NSTextField labelWithString:ns_string(s->boxtitle)];
+        t.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
+        t.textColor = NSColor.secondaryLabelColor;
+        t.lineBreakMode = NSLineBreakByTruncatingTail;
+        t.frame = NSMakeRect(2, y0, width - 2, kHeaderH);
+        [parent addSubview:t];
+        y0 += kHeaderH + 6;
+    }
     if (*s->boxname) {
         frame = [[NSBox alloc] initWithFrame:NSMakeRect(0, 0, width, 100)];
-        frame.titleFont = small_font();
-        if (s->boxtitle && *s->boxtitle) {
-            frame.title = ns_string(s->boxtitle);
-            frame.titlePosition = NSAtTop;
-        } else {
-            frame.titlePosition = NSNoTitle;
-        }
-        frame.contentViewMargins = NSMakeSize(8, 6);
+        frame.boxType = NSBoxCustom;
+        frame.titlePosition = NSNoTitle;
+        frame.cornerRadius = 8;
+        frame.borderWidth = 1;
+        frame.borderColor = NSColor.separatorColor;
+        frame.fillColor = group_fill_colour();
+        frame.contentViewMargins = NSMakeSize(12, 12);
         /* Work out how much of the width the frame itself takes. */
         [frame setFrameFromContentFrame:NSMakeRect(0, 0, 100, 100)];
         innerW = width - (frame.frame.size.width - 100);
@@ -679,6 +819,13 @@ static NSMutableSet<MTControlBox *> *open_boxes;
         uc.ctrl = ctrl;
         uc.box = self;
         uc.panel = panel;
+        uc.setName = ns_string(s->boxname);
+        if (ctrl->type == CTRL_EDITBOX && !hostCtrl &&
+            !strcmp(s->boxname, "hostport"))
+            hostCtrl = ctrl;
+        if (ctrl->type == CTRL_EDITBOX && !savedNameCtrl &&
+            !strcmp(s->boxname, "savedsessions"))
+            savedNameCtrl = ctrl;
         if (ctrl->align_next_to) {
             MTCtrl *other = [self uctrl:ctrl->align_next_to];
             if (other)
@@ -707,9 +854,9 @@ static NSMutableSet<MTControlBox *> *open_boxes;
         frame.frame = NSMakeRect(0, y0, width, f.size.height);
         target.frame = NSMakeRect(0, 0, innerW, h);
         [parent addSubview:frame];
-        return f.size.height;
+        return (y0 - start_y) + f.size.height;
     }
-    return h;
+    return (y0 - start_y) + h;
 }
 
 /* ----------------------------------------------------------------------
@@ -810,7 +957,7 @@ static NSMutableSet<MTControlBox *> *open_boxes;
     NSRect screen = (parent.screen ?: NSScreen.mainScreen).visibleFrame;
     CGFloat panelAreaH = MIN(maxPanelH, screen.size.height - 140);
     if (withTree)
-        panelAreaH = MAX(panelAreaH, 360);
+        panelAreaH = MAX(panelAreaH, 440);
 
     CGFloat treeW = withTree ? kTreeWidth + kMargin : 0;
     CGFloat contentW = kMargin + treeW + kPanelWidth + kMargin;
@@ -821,6 +968,19 @@ static NSMutableSet<MTControlBox *> *open_boxes;
     CGFloat barH = buttons ? [self layoutSet:buttons in:bar y:0
                                        width:contentW - 2 * kMargin
                                        panel:-1] : 0;
+    if (withTree && !mid) {
+        /* Where Open explains itself when there is nowhere to go. */
+        CGFloat bw = contentW - 2 * kMargin;
+        validationLabel = [NSTextField labelWithString:@""];
+        validationLabel.font = ui_font();
+        validationLabel.textColor = NSColor.systemRedColor;
+        validationLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        validationLabel.frame = NSMakeRect(floor(bw * 0.2) + 4,
+                                           floor((barH - kLabelH) / 2),
+                                           floor(bw * 0.4) - 8, kLabelH);
+        validationLabel.hidden = YES;
+        [bar addSubview:validationLabel];
+    }
 
     CGFloat contentH = kMargin + panelAreaH + kMargin + barH + kMargin;
     MTFlippedView *content = [[MTFlippedView alloc] initWithFrame:
@@ -850,13 +1010,14 @@ static NSMutableSet<MTControlBox *> *open_boxes;
 
     if (withTree) {
         NSTextField *cat = [NSTextField labelWithString:@"Category:"];
-        cat.font = small_font();
-        cat.frame = NSMakeRect(kMargin, kMargin, kTreeWidth, kLabelH);
+        cat.font = ui_font();
+        cat.textColor = NSColor.secondaryLabelColor;
+        cat.frame = NSMakeRect(kMargin, kMargin + 2, kTreeWidth, kLabelH);
         [content addSubview:cat];
 
         NSScrollView *sv = [[NSScrollView alloc] initWithFrame:
-            NSMakeRect(kMargin, kMargin + kLabelH + 3, kTreeWidth,
-                       panelAreaH - kLabelH - 3)];
+            NSMakeRect(kMargin, kMargin + kLabelH + 8, kTreeWidth,
+                       panelAreaH - kLabelH - 8)];
         sv.borderType = NSBezelBorder;
         sv.hasVerticalScroller = YES;
         sv.autohidesScrollers = YES;
@@ -864,14 +1025,14 @@ static NSMutableSet<MTControlBox *> *open_boxes;
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:@"t"];
         col.width = kTreeWidth - 4;
         NSTextFieldCell *cell = [NSTextFieldCell new];
-        cell.font = small_font();
+        cell.font = ui_font();
         col.dataCell = cell;
         [outline addTableColumn:col];
         outline.outlineTableColumn = col;
         outline.headerView = nil;
         outline.style = NSTableViewStylePlain;
-        outline.rowHeight = 16;
-        outline.indentationPerLevel = 12;
+        outline.rowHeight = 20;
+        outline.indentationPerLevel = 14;
         outline.dataSource = self;
         outline.delegate = self;
         outline.allowsEmptySelection = NO;
@@ -1121,10 +1282,31 @@ static CTFontRef font_for_spec(NSString *spec)
     if (isConfig && !midsession && value > 0 && data &&
         !conf_launchable((Conf *)data)) {
         NSBeep();
+        [self explainIfNotLaunchable];
         return;
+    }
+    if (isConfig && !midsession && value > 0 && savedNameCtrl) {
+        sfree(last_saved_name);
+        last_saved_name = dlg_editbox_get(savedNameCtrl, &dp);
     }
     retval = value;
     [self.window close];
+}
+
+/* Open with nowhere to go: config.c only beeps (as Windows PuTTY
+ * does); also say why, and put the cursor where it is needed. */
+- (void)explainIfNotLaunchable
+{
+    if (ended || !isConfig || midsession || !data || !validationLabel ||
+        conf_launchable((Conf *)data))
+        return;
+    BOOL serial = conf_get_int((Conf *)data, CONF_protocol) == PROT_SERIAL;
+    validationLabel.stringValue = serial ?
+        @"Enter a serial line to connect to." :
+        @"Enter a host name to connect to.";
+    validationLabel.hidden = NO;
+    if (hostCtrl)
+        dlg_set_focus(hostCtrl, &dp);
 }
 
 - (void)windowWillClose:(NSNotification *)n
@@ -1322,12 +1504,16 @@ void dlg_listbox_clear(dlgcontrol *ctrl, dlgparam *dp)
     box_of(dp)->suppress++;
     [uc.items removeAllObjects];
     [uc.ids removeAllObjects];
-    if (uc.popup)
+    [uc.values removeAllObjects];
+    [uc.details removeAllObjects];
+    if (uc.popup) {
         [uc.popup removeAllItems];
-    else if (uc.combo)
+    } else if (uc.combo) {
         [uc.combo removeAllItems];
-    else
+        [uc setListShown:NO];
+    } else {
         [uc.table reloadData];
+    }
     box_of(dp)->suppress--;
 }
 
@@ -1340,12 +1526,16 @@ void dlg_listbox_del(dlgcontrol *ctrl, dlgparam *dp, int index)
     box_of(dp)->suppress++;
     [uc.items removeObjectAtIndex:index];
     [uc.ids removeObjectAtIndex:index];
-    if (uc.popup)
+    if (uc.popup) {
         [uc.popup removeItemAtIndex:index];
-    else if (uc.combo)
+    } else if (uc.combo) {
         [uc.combo removeItemAtIndex:index];
-    else
+        if (index < (int)uc.values.count)
+            [uc.values removeObjectAtIndex:index];
+        [uc setListShown:uc.items.count > 0];
+    } else {
         [uc.table reloadData];
+    }
     box_of(dp)->suppress--;
 }
 
@@ -1366,7 +1556,17 @@ void dlg_listbox_addwithid(dlgcontrol *ctrl, dlgparam *dp,
         /* addItemWithTitle: would merge duplicate titles. */
         [uc.popup.menu addItemWithTitle:s action:NULL keyEquivalent:@""];
     } else if (uc.combo) {
-        [uc.combo addItemWithObjectValue:s];
+        /* "value\tdescription": show both, enter the value. */
+        NSRange tab = [s rangeOfString:@"\t"];
+        NSString *value = s, *shown = s;
+        if (tab.location != NSNotFound) {
+            value = [s substringToIndex:tab.location];
+            shown = [NSString stringWithFormat:@"%@  —  %@", value,
+                     [s substringFromIndex:NSMaxRange(tab)]];
+        }
+        [uc.values addObject:value];
+        [uc.combo addItemWithObjectValue:shown];
+        [uc setListShown:YES];
     } else {
         [uc.table reloadData];
     }

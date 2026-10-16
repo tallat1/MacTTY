@@ -42,6 +42,27 @@ char *mactty_font_display_name(const char *fontspec_name);
  * array of /dev/cu.* paths; free with mactty_free_string_array. */
 char **mactty_serial_lines(void);
 void mactty_free_string_array(char **array);
+/* What is behind a serial line, e.g. "FT232R USB UART · FTDI", from
+ * the USB device it belongs to; NULL if nothing is known. */
+char *mactty_serial_line_description(const char *path);
+
+/* recent.m: recently opened sessions, and saved session summaries. */
+void mactty_note_recent_session(Conf *conf, const char *saved_name);
+void mactty_clear_recent_sessions(void);
+char **mactty_recent_hosts(void);
+char *mactty_saved_session_detail(const char *name);
+bool mactty_saved_session_matches(const char *name, Conf *conf);
+#ifdef __OBJC__
+@class NSArray, NSDictionary, NSString;
+NSArray *mactty_recent_sessions(void);
+NSString *mactty_recent_title(NSDictionary *entry);
+NSString *mactty_recent_detail(NSDictionary *entry);
+Conf *mactty_conf_for_recent(NSDictionary *entry);
+#endif
+
+/* ConfigDialog.m: the name in the Saved Sessions box of the last
+ * configuration box closed with Open (to be freed), or NULL. */
+char *mactty_config_box_saved_name(void);
 
 /* pageant-socket.c: Pageant's agent socket. The fixed path is a link
  * to the live socket ($PUTTYDIR or ~/.putty, then "pageant.sock"). */

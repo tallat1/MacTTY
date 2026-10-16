@@ -47,6 +47,9 @@ typedef struct MacFrontend {
 /* Opens a session window for 'conf' and starts the connection. Takes
  * ownership of conf. */
 + (void)openSessionWithConf:(Conf *)conf;
+/* The same, remembering which saved session conf was loaded from (for
+ * the recent sessions list); name may be nil. */
++ (void)openSessionWithConf:(Conf *)conf savedSession:(NSString *)name;
 + (NSArray<MTSession *> *)sessions;
 
 /* PuTTY's "system menu": shown on Ctrl+click in the terminal. */

@@ -10,7 +10,8 @@ set(MACTTY_OBJC_SOURCES
   ${MACTTY_DIR}/ConfigDialog.m
   ${MACTTY_DIR}/Dialogs.m
   ${MACTTY_DIR}/eventloop.m
-  ${MACTTY_DIR}/platform-mac.m)
+  ${MACTTY_DIR}/platform-mac.m
+  ${MACTTY_DIR}/recent.m)
 
 add_executable(MacTTY MACOSX_BUNDLE
   ${MACTTY_OBJC_SOURCES}
@@ -32,7 +33,7 @@ target_link_libraries(MacTTY
   guiterminal eventloop sshclient otherbackends settings
   network crypto utils ${platform_libraries}
   "-framework Cocoa" "-framework Carbon" "-framework CoreText"
-  "-framework UniformTypeIdentifiers")
+  "-framework UniformTypeIdentifiers" "-framework IOKit")
 # PuTTY's command-line tools travel inside the application bundle, as
 # they come with PuTTY on Windows.
 set(MACTTY_TOOLS plink pscp psftp puttygen pageant)
