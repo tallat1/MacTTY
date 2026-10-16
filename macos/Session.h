@@ -86,6 +86,7 @@ int mac_askappend(MTSession *session, Filename *filename,
 void mac_show_event_log(MTSession *session);
 void mac_event_log_updated(MTSession *session);
 void mac_about_box(void);
+NSString *mactty_version(void);
 
 static inline MTSession *session_from_seat(Seat *seat)
 {

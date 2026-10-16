@@ -100,13 +100,19 @@ char *mt_passphrase_prompt(NSString *title, NSString *heading,
     return ret;
 }
 
+NSString *mt_version(void)
+{
+    return NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"";
+}
+
 void mt_about_box(const char *toolname, const char *description)
 {
     char *bi = buildinfo("\n");
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = mt_ns(toolname);
+    alert.messageText = [NSString stringWithFormat:@"%s %@", toolname,
+                         mt_version()];
     alert.informativeText = [NSString stringWithFormat:
-        @"%s\n\n%s\n\n%s\n\n"
+        @"%s\n\nBased on PuTTY %s\n\n%s\n\n"
         "PuTTY is copyright " SHORT_COPYRIGHT_DETAILS ". All rights reserved.",
         description, ver, bi];
     sfree(bi);

@@ -5,6 +5,35 @@ mantığı PuTTY 0.85'in kendi kodudur; yalnızca pencere ve diyalog katmanı
 AppKit ile yeniden yazılmıştır. Bu yüzden davranış, ayar seçenekleri ve
 kayıtlı oturum biçimi PuTTY ile birebir aynıdır.
 
+## İndir ve kur
+
+[Releases](https://github.com/tallat1/MacTTY/releases/latest) sayfasından
+`MacTTY-<sürüm>.dmg` dosyasını indirin, açın ve MacTTY'yi Applications
+klasörüne sürükleyin. macOS 14 (Sonoma) ve sonrasında, Apple silicon ve
+Intel Mac'lerde yerel olarak çalışır (universal).
+
+**İlk açılış.** MacTTY ücretsiz bir açık kaynak projedir; Apple Developer
+ID ile imzalanmamış ve Apple'ın noter onayından geçmemiştir (ad-hoc
+imzalı). Bu yüzden macOS ilk açılışta "MacTTY açılmadı / Apple, zararlı
+yazılım içermediğini doğrulayamadı" uyarısı verir. Bir kez şöyle açılır:
+
+1. MacTTY'yi açmayı deneyin, uyarıda **Bitti**'ye basın.
+2. **Sistem Ayarları › Gizlilik ve Güvenlik**'i açın; en altta "MacTTY
+   engellendi" satırındaki **Yine de Aç**'a basın ve parolanızla
+   onaylayın.
+3. Sonraki açılışlarda uyarı çıkmaz. MacTTYgen ya da Pageant menüden ilk
+   açılışta aynı uyarıyı verirse aynı adım onlar için de bir kez yapılır.
+
+macOS 14'te Finder'da MacTTY'ye Control-tıklayıp **Aç** demek de yeterlidir.
+Hepsini tek seferde onaylamak için Terminal'de:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MacTTY.app
+```
+
+İndirilen dosyayı doğrulamak için `shasum -a 256 MacTTY-<sürüm>.dmg`
+çıktısını release sayfasındaki `.sha256` dosyasıyla karşılaştırın.
+
 ## Neler var
 
 - **Bağlantı türleri:** SSH (SSH-2 ve SSH-1, tüm şifre/kex/host key
@@ -55,6 +84,18 @@ Gerekenler: Xcode (komut satırı araçlarıyla), CMake, Ninja
 ```
 
 Çıktı `build/MacTTY.app`. Hata ayıklama derlemesi için `./build.sh debug`.
+
+Dağıtım için:
+
+```bash
+./release.sh
+```
+
+Her mimariyi ayrı derler (`build-arm64/`, `build-x86_64/`), ikilileri
+`lipo` ile birleştirir, ad-hoc imzalar ve `dist/MacTTY-<sürüm>.dmg` ile
+SHA-256 dosyasını üretir. Betik her ikilinin iki mimariyi de içerdiğini,
+en düşük macOS sürümünün 14.0 olduğunu ve imzaların geçerli olduğunu
+denetler. Sürüm numarası `VERSION` dosyasındadır.
 
 ## Kullanım
 
@@ -129,6 +170,9 @@ ile şifreli yüklenir, `-keylist` listeyi açar); Pageant zaten
 
 ```
 putty/      PuTTY 0.85 kaynağı (sha512 doğrulanmış resmi sürüm)
+build.sh    geliştirme derlemesi
+release.sh  universal, imzalı DMG
+VERSION     MacTTY sürümü (Info.plist'lere ve About kutularına gider)
 macos/      Cocoa ön yüzü
   inject.cmake     PuTTY'nin CMake'ine kendi hedefimizi ekler
   targets.cmake    MacTTY.app hedefi
@@ -144,6 +188,7 @@ macos/      Cocoa ön yüzü
   Pageant.m        Pageant ön yüzü (windows/pageant.c karşılığı)
   pageant-socket.c Pageant soketinin yeri; MacTTY'nin ajan seçimi
   tools.m          MacTTYgen ve Pageant'ın ortak diyalogları
+  make-icon.swift  uygulama ikonlarını çizer (.icns dosyaları depoda)
 ```
 
 PuTTY kaynağında tek değişiklik vardır: `putty/unix/platform.h` içinde
@@ -157,5 +202,5 @@ yeniden uygulamak yeterlidir (`git log -p putty/unix/platform.h`).
 
 ## Lisans
 
-PuTTY MIT lisanslıdır (`putty/LICENCE`); MacTTY de aynı lisansla
-dağıtılır. PuTTY, copyright 1997-2026 Simon Tatham ve katkıda bulunanlar.
+MIT (`LICENSE`). PuTTY de MIT lisanslıdır (`putty/LICENCE`); PuTTY,
+copyright 1997-2026 Simon Tatham ve katkıda bulunanlar.

@@ -2211,7 +2211,8 @@ static void parse_command_line(int argc, char **argv)
         } else if (!strcmp(p, "--help") || !strcmp(p, "-help") ||
                    !strcmp(p, "--version") || !strcmp(p, "-version")) {
             char *bi = buildinfo("\n");
-            printf("%s: %s\n%s\n", TOOLNAME, ver, bi);
+            printf("%s %s (PuTTY %s)\n%s\n", TOOLNAME,
+                   mt_version().UTF8String, ver, bi);
             sfree(bi);
             exit(0);
         } else {

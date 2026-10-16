@@ -2,6 +2,12 @@
 # CMakeLists.txt by inject.cmake, so all of PuTTY's libraries and helper
 # functions (be_list etc.) are available here.
 
+# MacTTY's own version (VERSION at the top of the repository) goes into
+# the Info.plist of all three applications; PuTTY's stays in ver[].
+file(STRINGS ${MACTTY_DIR}/../VERSION MACTTY_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY
+  CMAKE_CONFIGURE_DEPENDS ${MACTTY_DIR}/../VERSION)
+
 set(MACTTY_OBJC_SOURCES
   ${MACTTY_DIR}/main.m
   ${MACTTY_DIR}/AppDelegate.m
@@ -113,6 +119,10 @@ set_target_properties(Pageant PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${MACTTY_TOOLS_DIR}
   MACOSX_BUNDLE_INFO_PLIST ${MACTTY_DIR}/Pageant-Info.plist.in)
 add_dependencies(MacTTY Pageant)
+
+set_target_properties(MacTTY MacTTYgen Pageant PROPERTIES
+  MACOSX_BUNDLE_SHORT_VERSION_STRING ${MACTTY_VERSION}
+  MACOSX_BUNDLE_BUNDLE_VERSION ${MACTTY_VERSION})
 
 # PuTTY must never be built with NDEBUG; setup.cmake strips it from the C
 # flags, so strip it from the Objective-C ones too.

@@ -1195,7 +1195,8 @@ static void parse_command_line(int argc, char **argv)
         } else if (!strcmp(p, "--help") || !strcmp(p, "-help") ||
                    !strcmp(p, "--version") || !strcmp(p, "-version")) {
             char *bi = buildinfo("\n");
-            printf("Pageant: %s\n%s\n", ver, bi);
+            printf("Pageant %s (PuTTY %s)\n%s\n",
+                   mt_version().UTF8String, ver, bi);
             sfree(bi);
             exit(0);
         } else {

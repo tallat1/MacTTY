@@ -111,7 +111,8 @@ static bool do_cmdline(int argc, char **argv, bool do_everything, Conf *conf)
         } else if (!strcmp(p, "-help") || !strcmp(p, "--help") ||
                    !strcmp(p, "-version") || !strcmp(p, "--version")) {
             char *bi = buildinfo("\n");
-            printf("%s: %s\n%s\n", appname, ver, bi);
+            printf("%s %s (PuTTY %s)\n%s\n", appname,
+                   mactty_version().UTF8String, ver, bi);
             sfree(bi);
             exit(0);
         } else if (!strcmp(p, "-pgpfp")) {

@@ -459,13 +459,21 @@ int mac_askappend(MTSession *s, Filename *filename,
  * About box.
  */
 
+/* MacTTY's own version, from Info.plist (see VERSION); ver[] is the
+ * version of PuTTY it is built on. */
+NSString *mactty_version(void)
+{
+    return NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"";
+}
+
 void mac_about_box(void)
 {
     char *bi = buildinfo("\n");
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = [NSString stringWithFormat:@"%s", appname];
+    alert.messageText = [NSString stringWithFormat:@"%s %@", appname,
+                         mactty_version()];
     alert.informativeText = [NSString stringWithFormat:
-        @"A native macOS port of PuTTY.\n\n%s\n\n%s\n\n"
+        @"A native macOS port of PuTTY.\n\nBased on PuTTY %s\n\n%s\n\n"
         "PuTTY is copyright " SHORT_COPYRIGHT_DETAILS ". All rights reserved.",
         ver, bi];
     sfree(bi);

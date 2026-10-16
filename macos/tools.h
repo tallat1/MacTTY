@@ -36,6 +36,9 @@ char *mt_passphrase_prompt(NSString *title, NSString *heading,
  * licence and web site, as in PuTTY's About boxes. */
 void mt_about_box(const char *toolname, const char *description);
 
+/* The version of MacTTY the tool came with, from its Info.plist. */
+NSString *mt_version(void);
+
 /* The pasteboard to copy to: the general one, or the one named by
  * MACTTY_PASTEBOARD (as in MacTTY, so tests never touch the user's
  * clipboard). */

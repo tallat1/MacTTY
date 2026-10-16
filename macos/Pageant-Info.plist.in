@@ -19,11 +19,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.85.0</string>
+	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>
@@ -31,6 +31,6 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Based on PuTTY, copyright 1997-2026 Simon Tatham and contributors. MIT licence.</string>
+	<string>MacTTY copyright 2026 Talat Özçoban. Based on PuTTY, copyright 1997-2026 Simon Tatham and contributors. MIT licence.</string>
 </dict>
 </plist>
