@@ -13,7 +13,20 @@
 #include "charset.h"
 #include <sys/types.h>         /* for mode_t */
 
-#ifdef OSX_GTK
+#if defined MACTTY
+/*
+ * MacTTY: native Cocoa front end on macOS. The Unix back ends and
+ * utilities are used unchanged; only the GUI layer is replaced. The
+ * user-visible behaviour (clipboards, defaults) follows Windows PuTTY.
+ */
+#define NOT_X_WINDOWS
+#define NO_PTY_PRE_INIT
+#define SET_NONBLOCK_VIA_OPENPT
+#define OSX_META_KEY_CONFIG
+
+#define BUILDINFO_PLATFORM_GTK "macOS (Cocoa)"
+
+#elif defined OSX_GTK
 /*
  * Assorted tweaks to various parts of the GTK front end which all
  * need to be enabled when compiling on OS X. Because I might need the
@@ -103,6 +116,19 @@ unsigned long getticks(void);
 #define WCHAR wchar_t
 #define BYTE unsigned char
 
+#if defined MACTTY
+/* MacTTY: one system clipboard and Windows PuTTY's historic defaults
+ * (selecting copies, right-click pastes). */
+#define PLATFORM_CLIPBOARDS(X)                            \
+    X(CLIP_SYSTEM, "system clipboard")                    \
+    /* end of list */
+#define CLIPNAME_IMPLICIT "Last selected text"
+#define CLIPNAME_EXPLICIT "System clipboard"
+#define CLIPNAME_EXPLICIT_OBJECT "system clipboard"
+#define CLIPUI_DEFAULT_AUTOCOPY true
+#define CLIPUI_DEFAULT_MOUSE CLIPUI_EXPLICIT
+#define CLIPUI_DEFAULT_INS CLIPUI_EXPLICIT
+#else
 #define PLATFORM_CLIPBOARDS(X)                            \
     X(CLIP_PRIMARY, "X11 primary selection")              \
     X(CLIP_CLIPBOARD, "XDG clipboard")                    \
@@ -110,8 +136,11 @@ unsigned long getticks(void);
     X(CLIP_CUSTOM_2, "<custom#2>")                        \
     X(CLIP_CUSTOM_3, "<custom#3>")                        \
     /* end of list */
+#endif
 
-#ifdef OSX_GTK
+#if defined MACTTY
+/* clipboard settings are above */
+#elif defined OSX_GTK
 /* OS X has no PRIMARY selection */
 #define MOUSE_SELECT_CLIPBOARD CLIP_NULL
 #define MOUSE_PASTE_CLIPBOARD CLIP_LOCAL
