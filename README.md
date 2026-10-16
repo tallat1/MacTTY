@@ -1,118 +1,205 @@
-# MacTTY
+<p align="center">
+  <img src="docs/images/icon.png" width="128" height="128" alt="MacTTY simgesi">
+</p>
 
-PuTTY'nin macOS için yerel (Cocoa) sürümü. Bağlantı, terminal ve ayar
-mantığı PuTTY 0.85'in kendi kodudur; yalnızca pencere ve diyalog katmanı
-AppKit ile yeniden yazılmıştır. Bu yüzden davranış, ayar seçenekleri ve
-kayıtlı oturum biçimi PuTTY ile birebir aynıdır.
+<h1 align="center">MacTTY</h1>
 
-## İndir ve kur
+<p align="center">
+  <b>PuTTY, Mac'in kendi arayüzüyle.</b><br>
+  SSH, Telnet, Rlogin, Raw ve seri konsol bağlantıları; PuTTY 0.85'in çekirdeği üzerinde yerel bir macOS uygulaması.
+</p>
 
-[Releases](https://github.com/tallat1/MacTTY/releases/latest) sayfasından
-`MacTTY-<sürüm>.dmg` dosyasını indirin, açın ve MacTTY'yi Applications
-klasörüne sürükleyin. macOS 14 (Sonoma) ve sonrasında, Apple silicon ve
-Intel Mac'lerde yerel olarak çalışır (universal).
+<p align="center">
+  <a href="https://github.com/tallat1/MacTTY/releases/latest"><img alt="Son sürüm" src="https://img.shields.io/github/v/release/tallat1/MacTTY?label=s%C3%BCr%C3%BCm&color=34a853"></a>
+  <img alt="macOS 14 ve üstü" src="https://img.shields.io/badge/macOS-14%2B-0a84ff?logo=apple&logoColor=white">
+  <img alt="Apple silicon ve Intel" src="https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-universal-555">
+  <img alt="PuTTY 0.85 tabanlı" src="https://img.shields.io/badge/PuTTY-0.85-2f6fb0">
+  <a href="LICENSE"><img alt="Lisans: MIT" src="https://img.shields.io/badge/lisans-MIT-blue"></a>
+</p>
 
-**İlk açılış.** MacTTY ücretsiz bir açık kaynak projedir; Apple Developer
-ID ile imzalanmamış ve Apple'ın noter onayından geçmemiştir (ad-hoc
-imzalı). Bu yüzden macOS ilk açılışta "MacTTY açılmadı / Apple, zararlı
-yazılım içermediğini doğrulayamadı" uyarısı verir. Bir kez şöyle açılır:
+<p align="center">
+  <a href="https://github.com/tallat1/MacTTY/releases/latest"><b>İndir</b></a>
+  &nbsp;·&nbsp; <a href="#kurulum">Kurulum</a>
+  &nbsp;·&nbsp; <a href="#özellikler">Özellikler</a>
+  &nbsp;·&nbsp; <a href="#kullanım">Kullanım</a>
+  &nbsp;·&nbsp; <a href="#kaynaktan-derleme">Kaynaktan derleme</a>
+</p>
 
-1. MacTTY'yi açmayı deneyin, uyarıda **Bitti**'ye basın.
-2. **Sistem Ayarları › Gizlilik ve Güvenlik**'i açın; en altta "MacTTY
-   engellendi" satırındaki **Yine de Aç**'a basın ve parolanızla
-   onaylayın.
-3. Sonraki açılışlarda uyarı çıkmaz. MacTTYgen ya da Pageant menüden ilk
-   açılışta aynı uyarıyı verirse aynı adım onlar için de bir kez yapılır.
+<p align="center">
+  <img src="docs/images/terminal.png" width="760" alt="MacTTY terminal penceresi: renkli ls çıktısı, Türkçe, Japonca, Korece, Rusça ve Yunanca metin, 16 renk, 24-bit renk ve gri tonlama şeritleri">
+</p>
 
-macOS 14'te Finder'da MacTTY'ye Control-tıklayıp **Aç** demek de yeterlidir.
-Hepsini tek seferde onaylamak için Terminal'de:
+## Neden MacTTY?
+
+PuTTY'nin resmi bir yerel Mac sürümü yok. MacTTY bu boşluğu PuTTY'yi
+yeniden yazmadan doldurur: bağlantı, şifreleme, terminal emülasyonu ve
+ayarlar PuTTY'nin kendi C kodudur, yalnızca pencere ve diyalog katmanı
+AppKit ile yazılmıştır.
+
+- **Aynı PuTTY.** Ayar kutusundaki her seçenek PuTTY'deki yerinde ve
+  aynı adla durur. Davranış, varsayılanlar ve hata mesajları PuTTY'ninkidir.
+- **Tanıdık düzen, Mac kontrolleri.** PuTTY Configuration penceresinin
+  kategori ağacı ve panelleri korunmuştur. Düğmeler, listeler ve menüler
+  macOS'un kendi kontrolleridir. Uygulama Karanlık Mod'a uyar, metni
+  Retina ekranda keskin çizer.
+- **Hepsi tek pakette.** MacTTYgen (PuTTYgen), Pageant ve `plink`, `pscp`,
+  `psftp`, `puttygen`, `pageant` komut satırı araçları uygulamanın içinde
+  gelir.
+- **Universal ve hafif.** Apple silicon ve Intel için tek uygulama, yaklaşık
+  6,5 MB'lık bir DMG. AES ve SHA donanım hızlandırması iki mimaride de açık.
+
+## Kurulum
+
+**Gereksinimler:** macOS 14 Sonoma veya üstü · Apple silicon ya da Intel
+işlemcili bir Mac.
+
+1. [Son sürüm sayfasından](https://github.com/tallat1/MacTTY/releases/latest)
+   `MacTTY-<sürüm>.dmg` dosyasını indirin.
+2. DMG'yi açın ve **MacTTY**'yi **Applications** klasörüne sürükleyin.
+3. MacTTY'yi Applications klasöründen ya da Launchpad'den açın.
+
+> [!IMPORTANT]
+> **İlk açılışta macOS onay ister.** MacTTY ücretsiz bir açık kaynak
+> projedir; Apple Developer ID ile imzalanmamış ve Apple'ın noter onayından
+> geçmemiştir (ad-hoc imzalı). Bu yüzden macOS ilk açılışta uygulamanın
+> doğrulanamadığını söyler. Bir kez onaylamanız yeterli:
+>
+> 1. Uyarıda **Bitti**'ye basın.
+> 2. **Sistem Ayarları › Gizlilik ve Güvenlik**'i açın. En altta
+>    "MacTTY engellendi" satırındaki **Yine de Aç**'a basın ve parolanızla
+>    onaylayın.
+>
+> macOS 14'te Finder'da MacTTY'ye Control-tıklayıp **Aç** demek de
+> yeterlidir. MacTTYgen ya da Pageant menüden ilk açıldığında aynı uyarıyı
+> verirse aynı adımı onlar için de bir kez yapın.
+
+<details>
+<summary><b>Terminal ile tek seferde onaylamak</b></summary>
+
+<br>
+
+Uygulamayı ve içindeki araçları karantinadan çıkarır:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/MacTTY.app
 ```
 
-İndirilen dosyayı doğrulamak için `shasum -a 256 MacTTY-<sürüm>.dmg`
-çıktısını release sayfasındaki `.sha256` dosyasıyla karşılaştırın.
+</details>
 
-## Neler var
+<details>
+<summary><b>İndirilen dosyayı doğrulamak</b></summary>
 
-- **Bağlantı türleri:** SSH (SSH-2 ve SSH-1, tüm şifre/kex/host key
-  seçenekleri, PPK anahtarları — OpenSSH anahtarı paketteki `puttygen` ile
-  çevrilir —, sertifikalar, ssh-agent/Pageant, agent forwarding, port
-  yönlendirme, X11, bağlantı paylaşımı, proxy), Telnet, Rlogin, SUPDUP,
-  Raw, Seri hat (`/dev/cu.*`).
-- **PuTTY Configuration penceresi:** solda kategori ağacı, sağda paneller,
-  altta About / Open / Cancel. Paneller PuTTY'nin `config.c` tanımlarından
-  çizildiği için tüm kategoriler ve seçenekler PuTTY'deki gibidir. Oturum
-  sırasında "Change Settings" aynı kutuyu "Apply" ile açar.
-- **Terminal:** PuTTY'nin terminal emülatörü (xterm/VT100), 16/256/24-bit
-  renk, kalın/altı çizili/ters/üstü çizili/soluk metin, Unicode, CJK geniş
-  karakterler, birleşik karakterler, çift genişlik ve çift yükseklik
-  satırları, kaydırma geçmişi, fare raporlama, yeniden boyutlandırma.
-- **Oturum menüsü:** PuTTY'nin sistem menüsü (Event Log, Special Command,
-  New/Duplicate/Restart Session, Saved Sessions, Change Settings, Copy All
-  to Clipboard, Clear Scrollback, Reset Terminal, Full Screen) hem menü
-  çubuğunda hem terminalde Ctrl+tıkla açılan menüde.
-- **Güvenlik uyarıları:** host key, zayıf şifre ve log dosyası soruları
-  PuTTY'nin kendi metinleriyle; host ve parmak izi ayrı kutularda, parmak
-  izi tek tıkla kopyalanır, "More info" yerinde açılır.
-- **Mac'e özgü kolaylıklar:** seri hat listesi takılı portları cihaz
-  adıyla gösterir (ör. `FT232R USB UART · FTDI`); host listesinde son
-  bağlanılan host'lar; Session › Open Recent ve Dock menüsünde son ve
-  kayıtlı oturumlar (Windows PuTTY'deki Jump List'in karşılığı); oturum
-  bitince başlıkta "(inactive)" ve altta Restart Session / Close bandı;
-  boş host ile Open'a basınca neyin eksik olduğu yazılır.
-- **MacTTYgen (PuTTYgen):** anahtar üretici; PuTTYgen penceresinin Key /
-  Actions / Parameters kutuları, File / Key / Conversions menüleri,
-  fareyle rastgelelik toplama, PPK kayıt parametreleri, OpenSSH ve
-  ssh.com içe/dışa aktarma, sertifika ekleme/çıkarma.
-- **Pageant:** SSH ajanı; menü çubuğu simgesi (PuTTY'nin bildirim alanı
-  menüsü), anahtar listesi penceresi (Add Key, Add Key (encrypted),
-  Re-encrypt, Remove), istek gelince parola sorarak açılan şifreli
-  anahtarlar. MacTTY oturumları Pageant çalışıyorsa onu kullanır;
-  OpenSSH (`ssh`, `ssh-add`, `git`) de aynı soketi kullanabilir.
-- **Komut satırı araçları:** `plink`, `pscp`, `psftp`, `puttygen`,
-  `pageant` uygulama paketinin içinde: `MacTTY.app/Contents/Resources/bin`.
+<br>
 
-## Derleme
-
-Gerekenler: Xcode (komut satırı araçlarıyla), CMake, Ninja
-(`brew install cmake ninja`).
+Her sürümde DMG'nin yanında bir `.sha256` dosyası bulunur. Çıktılar
+aynı olmalı:
 
 ```bash
-./build.sh
+shasum -a 256 MacTTY-1.0.0.dmg
 ```
 
-Çıktı `build/MacTTY.app`. Hata ayıklama derlemesi için `./build.sh debug`.
+</details>
 
-Dağıtım için:
+## Özellikler
+
+### Bağlantılar
+
+| Bağlantı | Neler var |
+|---|---|
+| **SSH** | SSH-2 ve SSH-1; PuTTY'nin tüm şifre, anahtar değişimi ve host key algoritmaları; PPK anahtarları ve sertifikalar; Pageant ve ssh-agent; agent forwarding; yerel, uzak ve dinamik port yönlendirme; X11 yönlendirme; bağlantı paylaşımı |
+| **Seri hat** | `/dev/cu.*` portları; hız, veri biti, durma biti, parite ve akış kontrolü. Takılı portlar cihaz adıyla listelenir, ör. `FT232R USB UART · FTDI` |
+| **Telnet, Rlogin, SUPDUP, Raw** | PuTTY'deki tüm seçenekleriyle |
+| **Proxy** | HTTP, SOCKS 4/5, Telnet, SSH atlama sunucusu ve yerel komut |
+
+### Terminal
+
+- PuTTY'nin xterm uyumlu terminal emülatörü: 16, 256 ve 24-bit renk;
+  kalın, altı çizili, ters, üstü çizili ve soluk metin.
+- Unicode: Türkçe karakterler, geniş CJK karakterleri, birleşik
+  karakterler, çift genişlik ve çift yükseklik satırları.
+- Kaydırma geçmişi ve fare raporlama (`vim`, `htop`, `mc` gibi
+  programlarda fare çalışır).
+- Pencere boyutu değişince yeni boyut sunucuya gider. İsterseniz ızgara
+  sabit kalır, yazı tipi büyür.
+- PuTTY'deki gibi seçilen metin kendiliğinden kopyalanır, sağ tık
+  yapıştırır. ⌘C ve ⌘V de çalışır.
+
+### Oturumlar
+
+<p align="center">
+  <img src="docs/images/configuration.png" width="620" alt="MacTTY Configuration penceresi: solda kategori ağacı, sağda host ve port alanları, bağlantı türü ve yanında protokol ile host bilgisi görünen kayıtlı oturum listesi">
+</p>
+
+- Kayıtlı oturumlar PuTTY'nin Unix sürümüyle aynı biçimde
+  `~/.putty/sessions` altında durur. Listede her oturumun yanında
+  protokolü ve hedefi görünür.
+- Son bağlantılar **Session › Open Recent** menüsünde ve Dock simgesinin
+  menüsünde (Windows PuTTY'deki Jump List'in karşılığı). Host alanı son
+  bağlanılan host'ları önerir.
+- PuTTY'nin oturum menüsü hem menü çubuğunda hem terminalde Ctrl+tıkla:
+  Event Log, Special Command, New/Duplicate/Restart Session, Saved
+  Sessions, Change Settings, Copy All to Clipboard, Clear Scrollback, Reset
+  Terminal, Full Screen.
+- Bağlantı kapanınca başlıkta "(inactive)" yazar, pencerenin altında
+  **Restart Session** ve **Close** düğmeleri belirir.
+
+### Güvenlik
+
+- Host key uyarıları PuTTY'nin kendi metinleriyle gelir. Host ve parmak
+  izi ayrı kutularda görünür, parmak izi tek tıkla kopyalanır, ayrıntılar
+  aynı pencerede açılır.
+- Bilinen host anahtarları `~/.putty/sshhostkeys` altında tutulur.
+
+### MacTTYgen ve Pageant
+
+<p align="center">
+  <img src="docs/images/mactty-gen.png" width="460" alt="MacTTYgen anahtar üretici penceresi: yüklü bir Ed25519 anahtarının açık anahtarı, parmak izi ve yorumu; Generate, Load ve Save düğmeleri; anahtar türü seçenekleri">
+</p>
+
+İkisi de MacTTY uygulama menüsünden açılır ve Windows'taki gibi ayrı
+programlardır.
+
+- **MacTTYgen**, PuTTYgen'in karşılığıdır. RSA, DSA, ECDSA, EdDSA ve
+  SSH-1 anahtarı üretir. Rastgelelik fareyle toplanır. Anahtarları PPK
+  olarak kaydeder, OpenSSH ve ssh.com biçimlerine aktarır ya da bu
+  biçimlerden alır, sertifika ekler ve çıkarır.
+- **Pageant**, PuTTY'nin SSH ajanıdır. Menü çubuğunda yaşar; anahtar
+  listesi penceresinden anahtar ekler, şifreli yükler ve kaldırırsınız.
+  Şifreli yüklenen anahtarın parolası ilk kullanıldığında sorulur.
+  Pageant çalışırken MacTTY onu kendiliğinden kullanır. OpenSSH araçlarının
+  (`ssh`, `ssh-add`, `git`) da kullanması için:
+
+  ```bash
+  export SSH_AUTH_SOCK=~/.putty/pageant.sock
+  ```
+
+  ya da `~/.ssh/config` dosyasına `IdentityAgent ~/.putty/pageant.sock`
+  satırını ekleyin.
+
+### Komut satırı araçları
+
+`plink`, `pscp`, `psftp`, `puttygen` ve `pageant` uygulamanın içinde gelir
+ve MacTTY ile aynı kayıtlı oturumları kullanır. `PATH`'e eklemek için
+`~/.zshrc` dosyasına:
 
 ```bash
-./release.sh
+export PATH="/Applications/MacTTY.app/Contents/Resources/bin:$PATH"
 ```
-
-Her mimariyi ayrı derler (`build-arm64/`, `build-x86_64/`), ikilileri
-`lipo` ile birleştirir, ad-hoc imzalar ve `dist/MacTTY-<sürüm>.dmg` ile
-SHA-256 dosyasını üretir. Betik her ikilinin iki mimariyi de içerdiğini,
-en düşük macOS sürümünün 14.0 olduğunu ve imzaların geçerli olduğunu
-denetler. Sürüm numarası `VERSION` dosyasındadır.
 
 ## Kullanım
 
-Uygulama PuTTY gibi önce ayar penceresiyle açılır. Komut satırından
-PuTTY'nin seçenekleri geçer:
+MacTTY, PuTTY gibi ayar penceresiyle açılır. Host'u yazıp **Open**'a
+basmanız yeterli. Kayıtlı bir oturumu çift tıklamak onu doğrudan açar.
+
+PuTTY'nin komut satırı seçenekleri de geçerlidir:
 
 ```bash
-build/MacTTY.app/Contents/MacOS/MacTTY -ssh -l kullanici -P 22 sunucu.example.com
+/Applications/MacTTY.app/Contents/MacOS/MacTTY -ssh -l kullanici sunucu.example.com
 ```
 
 ```bash
-build/MacTTY.app/Contents/MacOS/MacTTY -load "Kayıtlı oturum"
+/Applications/MacTTY.app/Contents/MacOS/MacTTY -load "Kayıtlı oturum"
 ```
-
-Kayıtlı oturumlar `~/.putty/sessions`, bilinen host anahtarları
-`~/.putty/sshhostkeys` altında tutulur; paketteki `plink`/`pscp`/`psftp`
-aynı oturumları kullanır.
 
 **Mac klavyesinde PuTTY tuşları**
 
@@ -123,59 +210,45 @@ aynı oturumları kullanır.
 | Ctrl+Break | Ctrl+F15 |
 | Num Lock | Sayısal tuş takımındaki Clear |
 | Alt+Enter (tam ekran) | Option+Return ("Full screen on Option-Return") |
-| Alt+F4 | Command+W ("Window closes on Command-W") |
+| Alt+F4 | ⌘W ("Window closes on Command-W") |
 | Sistem menüsü | Ctrl+tık; "macOS" fare kipinde sağ tık |
 
-Seçim PuTTY'deki gibi otomatik olarak panoya kopyalanır, sağ tık
-yapıştırır. Command+C / Command+V de çalışır.
+## Kaynaktan derleme
 
-## MacTTYgen ve Pageant
-
-İkisi de MacTTY menüsünden açılır (**MacTTYgen Key Generator**,
-**Pageant SSH Agent**). Windows'taki gibi ayrı programlardır ve
-`MacTTY.app/Contents/Applications` içinde dururlar; MacTTY.app'i
-taşıyınca onlar da gelir. Ayrı olmalarının nedenleri: Pageant terminal
-pencereleri kapansa da çalışmayı sürdürmeli (MacTTY son pencere
-kapanınca PuTTY gibi kapanır), menü çubuğunda Dock simgesi olmadan
-yaşamalı; MacTTYgen anahtarı ayrı bir iş parçacığında üretir ve PuTTY'nin
-rastgele sayı havuzu iş parçacığı güvenli değildir, o yüzden canlı SSH
-oturumlarıyla aynı süreçte olmamalı.
-
-**MacTTYgen** PuTTYgen'in komut satırını da alır:
+Gerekenler: Xcode komut satırı araçları, CMake ve Ninja.
 
 ```bash
-build/MacTTY.app/Contents/Applications/MacTTYgen.app/Contents/MacOS/MacTTYgen -t ed25519
+brew install cmake ninja
 ```
-
-(`-t rsa|dsa|ecdsa|eddsa|ed25519|ed448|rsa1`, `-b bit`, `-E md5|sha256`,
-`-primes`, `-strong-rsa`, `-ppk-param`, yüklenecek anahtar dosyası.)
-
-**Pageant** soketini Unix Pageant gibi `/tmp/pageant.<kullanıcı>/`
-altında açar ve sabit bir bağlantıyla gösterir:
-`~/.putty/pageant.sock`. MacTTY her bağlantıdan önce buna bakar; Pageant
-çalışıyorsa onu, çalışmıyorsa başlatıldığı ajanı (macOS'in ssh-agent'ı)
-kullanır. OpenSSH araçları için:
 
 ```bash
-export SSH_AUTH_SOCK=~/.putty/pageant.sock
+./build.sh
 ```
 
-ya da `~/.ssh/config` içinde `IdentityAgent ~/.putty/pageant.sock`.
-Anahtar listesi penceresi bu yolu gösterir ve "Copy Command" ile
-kopyalar. Komut satırında anahtar dosyaları verilebilir (`--encrypted`
-ile şifreli yüklenir, `-keylist` listeyi açar); Pageant zaten
-çalışıyorsa dosyalar ona eklenir.
+Uygulama `build/MacTTY.app` olarak çıkar. `./build.sh debug` hata
+ayıklama derlemesi yapar.
 
-## Yapı
+Dağıtım için `./release.sh` kullanılır. Betik her mimariyi ayrı derler
+(`build-arm64/`, `build-x86_64/`), ikilileri `lipo` ile birleştirir,
+ad-hoc imzalar ve `dist/` altına DMG ile SHA-256 dosyasını yazar. Ardından
+her ikilinin iki mimariyi de içerdiğini, en düşük macOS sürümünün 14.0
+olduğunu ve imzaların geçerli olduğunu denetler. Sürüm numarası `VERSION`
+dosyasındadır.
+
+<details>
+<summary><b>Proje yapısı</b></summary>
+
+<br>
 
 ```
 putty/      PuTTY 0.85 kaynağı (sha512 doğrulanmış resmi sürüm)
 build.sh    geliştirme derlemesi
 release.sh  universal, imzalı DMG
 VERSION     MacTTY sürümü (Info.plist'lere ve About kutularına gider)
+docs/       README görselleri
 macos/      Cocoa ön yüzü
   inject.cmake     PuTTY'nin CMake'ine kendi hedefimizi ekler
-  targets.cmake    MacTTY.app hedefi
+  targets.cmake    MacTTY.app, MacTTYgen.app ve Pageant.app hedefleri
   eventloop.m      uxsel / zamanlayıcı / toplevel callback → CFRunLoop
   TerminalView.m   CoreText çizimi, klavye ve fare çevirisi
   Session.m        TermWin, Seat, LogPolicy; oturum yaşam döngüsü
@@ -183,6 +256,7 @@ macos/      Cocoa ön yüzü
   Dialogs.m        güvenlik uyarıları, Event Log, About
   config-mac.c     Mac'e özgü ayar seçenekleri (windows/config.c karşılığı)
   platform-mac.m   platform varsayılanları, seri port listesi
+  recent.m         son oturumlar
   AppDelegate.m    menü çubuğu, açılış, komut satırı
   Keygen.m         MacTTYgen (windows/puttygen.c karşılığı)
   Pageant.m        Pageant ön yüzü (windows/pageant.c karşılığı)
@@ -191,16 +265,38 @@ macos/      Cocoa ön yüzü
   make-icon.swift  uygulama ikonlarını çizer (.icns dosyaları depoda)
 ```
 
-PuTTY kaynağında tek değişiklik vardır: `putty/unix/platform.h` içinde
-`MACTTY` profili (pano anlamı ve OS X Meta tuşu ayarı). PuTTY'nin yeni
-sürümüne geçmek için `putty/` klasörünü yenisiyle değiştirip bu yamayı
-yeniden uygulamak yeterlidir (`git log -p putty/unix/platform.h`).
+PuTTY kaynağında tek bir değişiklik vardır: `putty/unix/platform.h`
+içindeki `MACTTY` profili (pano davranışı ve Option tuşunun Meta ayarı).
+PuTTY'nin yeni bir sürümüne geçmek için `putty/` klasörünü yenisiyle
+değiştirip bu yamayı yeniden uygulamak yeterlidir
+(`git log -p putty/unix/platform.h`).
 
-## Henüz olmayanlar
+MacTTYgen ve Pageant'ın ayrı uygulama olmasının iki nedeni var. Pageant
+terminal pencereleri kapandıktan sonra da çalışmalı ve Dock simgesi
+olmadan menü çubuğunda durmalı. MacTTYgen anahtarı ayrı bir iş
+parçacığında üretir ve PuTTY'nin rastgele sayı havuzu iş parçacığı
+güvenli değildir, bu yüzden canlı SSH oturumlarıyla aynı süreçte
+olmamalı.
 
-- Uzaktan yazdırma denenmedi.
+</details>
 
-## Lisans
+## Bilinen sınırlar
 
-MIT (`LICENSE`). PuTTY de MIT lisanslıdır (`putty/LICENCE`); PuTTY,
-copyright 1997-2026 Simon Tatham ve katkıda bulunanlar.
+- Uygulama Apple Developer ID ile imzalı değil. İlk açılışta bir kez
+  onay gerekir ([Kurulum](#kurulum)).
+- Universal derleme Intel Mac'ler ve macOS 14 için hazırlandı, ancak bu
+  ortamlarda henüz denenmedi.
+- Uzaktan yazdırma (remote printing) ve X11 yönlendirme henüz denenmedi.
+  X11 yönlendirme için XQuartz gibi bir X sunucusu gerekir.
+
+Bir sorunla karşılaşırsanız [issue açabilirsiniz](https://github.com/tallat1/MacTTY/issues).
+
+## Lisans ve teşekkür
+
+MacTTY [MIT lisansıyla](LICENSE) dağıtılır. Uygulamanın çekirdeği olan
+[PuTTY](https://www.chiark.greenend.org.uk/~sgtatham/putty/) de MIT
+lisanslıdır (`putty/LICENCE`); copyright 1997-2026 Simon Tatham ve
+katkıda bulunanlar.
+
+MacTTY bağımsız bir projedir; PuTTY ekibi tarafından geliştirilmez ve
+onaylanmamıştır.
