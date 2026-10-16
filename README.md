@@ -41,7 +41,9 @@ AppKit ile yazılmıştır.
 - **Tanıdık düzen, Mac kontrolleri.** PuTTY Configuration penceresinin
   kategori ağacı ve panelleri korunmuştur. Düğmeler, listeler ve menüler
   macOS'un kendi kontrolleridir. Uygulama Karanlık Mod'a uyar, metni
-  Retina ekranda keskin çizer.
+  Retina ekranda keskin çizer. İkonlar Apple'ın katmanlı ikon biçimindedir:
+  macOS 26 ve sonrasında Liquid Glass ile çizilir, koyu, şeffaf ve renkli
+  ikon stillerine uyar.
 - **Hepsi tek pakette.** MacTTYgen (PuTTYgen), Pageant ve `plink`, `pscp`,
   `psftp`, `puttygen`, `pageant` komut satırı araçları uygulamanın içinde
   gelir.
@@ -215,7 +217,8 @@ PuTTY'nin komut satırı seçenekleri de geçerlidir:
 
 ## Kaynaktan derleme
 
-Gerekenler: Xcode komut satırı araçları, CMake ve Ninja.
+Gerekenler: Xcode 26 veya üstü (uygulama ikonlarını `actool` derler),
+CMake ve Ninja.
 
 ```bash
 brew install cmake ninja
@@ -262,7 +265,7 @@ macos/      Cocoa ön yüzü
   Pageant.m        Pageant ön yüzü (windows/pageant.c karşılığı)
   pageant-socket.c Pageant soketinin yeri; MacTTY'nin ajan seçimi
   tools.m          MacTTYgen ve Pageant'ın ortak diyalogları
-  make-icon.swift  uygulama ikonlarını çizer (.icns dosyaları depoda)
+  icons/           uygulama ikonları (Icon Composer belgeleri, .icon)
 ```
 
 PuTTY kaynağında tek bir değişiklik vardır: `putty/unix/platform.h`

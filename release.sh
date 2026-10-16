@@ -52,7 +52,7 @@ for a in $app/Contents/Applications/*.app $app; do
 done
 
 # Check what is shipped: both architectures, macOS 14 as the minimum,
-# valid signatures.
+# the icons, valid signatures.
 for f in $machos; do
   archs=$(lipo -archs "$f")
   [ "$archs" = "x86_64 arm64" ] || [ "$archs" = "arm64 x86_64" ] ||
@@ -68,6 +68,8 @@ for p in $app $app/Contents/Applications/*.app; do
         "$p/Contents/Info.plist")
   [ "$v" = "$minos" ] ||
     { echo "$p: LSMinimumSystemVersion is $v, not $minos" >&2; exit 1; }
+  [ -f "$p/Contents/Resources/Assets.car" ] ||
+    { echo "$p: no icon (Assets.car missing; actool from Xcode 26 needed)" >&2; exit 1; }
 done
 codesign --verify --deep --strict $app
 
@@ -77,7 +79,7 @@ stage=$dist/stage
 mkdir $stage
 ditto $app $stage/MacTTY.app
 ln -s /Applications $stage/Applications
-cp macos/MacTTY.icns $stage/.VolumeIcon.icns
+cp $app/Contents/Resources/MacTTY.icns $stage/.VolumeIcon.icns
 SetFile -a C $stage
 hdiutil create -volname "MacTTY $version" -srcfolder $stage \
     -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov $dmg

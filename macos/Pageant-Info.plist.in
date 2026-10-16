@@ -8,6 +8,8 @@
 	<string>Pageant</string>
 	<key>CFBundleIconFile</key>
 	<string>Pageant</string>
+	<key>CFBundleIconName</key>
+	<string>Pageant</string>
 	<key>CFBundleIdentifier</key>
 	<string>org.mactty.Pageant</string>
 	<key>CFBundleInfoDictionaryVersion</key>

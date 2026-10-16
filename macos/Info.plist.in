@@ -8,6 +8,8 @@
 	<string>MacTTY</string>
 	<key>CFBundleIconFile</key>
 	<string>MacTTY</string>
+	<key>CFBundleIconName</key>
+	<string>MacTTY</string>
 	<key>CFBundleIdentifier</key>
 	<string>org.mactty.MacTTY</string>
 	<key>CFBundleInfoDictionaryVersion</key>

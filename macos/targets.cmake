@@ -8,6 +8,44 @@ file(STRINGS ${MACTTY_DIR}/../VERSION MACTTY_VERSION LIMIT_COUNT 1)
 set_property(DIRECTORY APPEND PROPERTY
   CMAKE_CONFIGURE_DEPENDS ${MACTTY_DIR}/../VERSION)
 
+# The application icons are Icon Composer documents (macos/icons). actool
+# turns each into an asset catalog holding the layered Liquid Glass icon
+# with its dark, clear and tinted variants for macOS 26 and later, and
+# the flattened images earlier systems show; Info.plist names the icon
+# in CFBundleIconName. This needs actool from Xcode 26 or later; without
+# it the applications are built with no icon of their own.
+execute_process(COMMAND xcrun --find actool
+  OUTPUT_VARIABLE MACTTY_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET)
+if(NOT MACTTY_ACTOOL)
+  message(WARNING "actool not found (Xcode 26 or later is needed): "
+    "MacTTY, MacTTYgen and Pageant will have no icons")
+endif()
+function(mactty_app_icon target)
+  if(NOT MACTTY_ACTOOL)
+    return()
+  endif()
+  set(icon ${MACTTY_DIR}/icons/${target}.icon)
+  set(out ${CMAKE_BINARY_DIR}/icons/${target})
+  file(GLOB_RECURSE icon_files ${icon}/*)
+  add_custom_command(
+    OUTPUT ${out}/Assets.car ${out}/${target}.icns
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${out}
+    COMMAND ${MACTTY_ACTOOL} ${icon} --compile ${out}
+      --app-icon ${target} --include-all-app-icons
+      --output-partial-info-plist ${out}/partial.plist
+      --platform macosx --target-device mac
+      --minimum-deployment-target ${CMAKE_OSX_DEPLOYMENT_TARGET}
+      --enable-on-demand-resources NO --development-region en
+      --errors --warnings --output-format human-readable-text
+    DEPENDS ${icon_files}
+    COMMENT "Compiling the ${target} icon"
+    VERBATIM)
+  target_sources(${target} PRIVATE ${out}/Assets.car ${out}/${target}.icns)
+  set_source_files_properties(${out}/Assets.car ${out}/${target}.icns
+    PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+endfunction()
+
 set(MACTTY_OBJC_SOURCES
   ${MACTTY_DIR}/main.m
   ${MACTTY_DIR}/AppDelegate.m
@@ -26,11 +64,9 @@ add_executable(MacTTY MACOSX_BUNDLE
   ${CMAKE_SOURCE_DIR}/unix/unicode.c
   ${CMAKE_SOURCE_DIR}/unix/printing.c
   ${CMAKE_SOURCE_DIR}/unix/config-unix.c
-  ${CMAKE_SOURCE_DIR}/stubs/no-console.c
-  ${MACTTY_DIR}/MacTTY.icns)
+  ${CMAKE_SOURCE_DIR}/stubs/no-console.c)
 be_list(MacTTY MacTTY SSH SERIAL OTHERBACKENDS)
-set_source_files_properties(${MACTTY_DIR}/MacTTY.icns
-  PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+mactty_app_icon(MacTTY)
 add_dependencies(MacTTY generated_licence_h)
 target_include_directories(MacTTY PRIVATE ${MACTTY_DIR})
 set_source_files_properties(${MACTTY_OBJC_SOURCES}
@@ -76,10 +112,8 @@ add_executable(MacTTYgen MACOSX_BUNDLE
   ${CMAKE_SOURCE_DIR}/unix/noise.c
   ${CMAKE_SOURCE_DIR}/unix/storage.c
   ${CMAKE_SOURCE_DIR}/sshpubk.c
-  ${CMAKE_SOURCE_DIR}/sshrand.c
-  ${MACTTY_DIR}/MacTTYgen.icns)
-set_source_files_properties(${MACTTY_DIR}/MacTTYgen.icns
-  PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+  ${CMAKE_SOURCE_DIR}/sshrand.c)
+mactty_app_icon(MacTTYgen)
 add_dependencies(MacTTYgen generated_licence_h)
 target_include_directories(MacTTYgen PRIVATE ${MACTTY_DIR})
 set_source_files_properties(${MACTTYGEN_OBJC_SOURCES}
@@ -103,10 +137,8 @@ add_executable(Pageant MACOSX_BUNDLE
   ${CMAKE_SOURCE_DIR}/unix/unicode.c
   ${CMAKE_SOURCE_DIR}/unix/no-gtk.c
   ${CMAKE_SOURCE_DIR}/ssh/x11fwd.c
-  ${CMAKE_SOURCE_DIR}/proxy/nosshproxy.c
-  ${MACTTY_DIR}/Pageant.icns)
-set_source_files_properties(${MACTTY_DIR}/Pageant.icns
-  PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+  ${CMAKE_SOURCE_DIR}/proxy/nosshproxy.c)
+mactty_app_icon(Pageant)
 be_list(Pageant Pageant)
 add_dependencies(Pageant generated_licence_h)
 target_include_directories(Pageant PRIVATE ${MACTTY_DIR})
