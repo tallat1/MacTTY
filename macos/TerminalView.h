@@ -24,6 +24,14 @@
 - (NSString *)setupFontsFromConf:(Conf *)conf;
 - (void)setFontQuality:(int)quality;
 
+/* "Change the size of the font": loads the fonts named in conf scaled
+ * so that a cols x rows grid fills the view, centred in what is left
+ * over. conf is not changed. Returns YES if the character cells moved
+ * (the caller redraws the terminal). setupFontsFromConf: goes back to
+ * the configured size. */
+- (BOOL)fitFontsFromConf:(Conf *)conf cols:(int)cols rows:(int)rows;
+@property (nonatomic, readonly) BOOL fontsFitted;
+
 /* Geometry: the view size for a given grid, and the grid for a size. */
 - (NSSize)sizeForCols:(int)cols rows:(int)rows;
 - (void)gridForSize:(NSSize)size cols:(int *)cols rows:(int *)rows;

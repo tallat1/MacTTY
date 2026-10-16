@@ -428,7 +428,7 @@ static NSMapTable<MTSession *, MTEventLogController *> *event_logs;
         if (i < log.count)
             [s appendFormat:@"%@\n", log[i]];
     }];
-    NSPasteboard *pb = NSPasteboard.generalPasteboard;
+    NSPasteboard *pb = mactty_pasteboard();
     [pb clearContents];
     [pb setString:s forType:NSPasteboardTypeString];
 }

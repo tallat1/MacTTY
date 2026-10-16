@@ -40,6 +40,8 @@ static NSMutableArray<MTSession *> *all_sessions;
 - (void)connectionFatal:(const char *)msg;
 - (void)remoteExited;
 - (void)logEvent:(const char *)string;
+- (void)zoomWillStart;
+- (void)zoomDidEnd;
 @end
 
 /* ----------------------------------------------------------------------
@@ -184,8 +186,13 @@ static void mac_set_maximised(TermWin *tw, bool maximised)
 
 static void mac_move(TermWin *tw, int x, int y)
 {
-    /* x and y are in pixels from the top-left of the screen. */
-    NSWindow *w = session_from_termwin(tw).window;
+    /* x and y are in pixels from the top-left of the screen. As in
+     * Windows PuTTY, a window that sizes its font to fit stays put. */
+    MTSession *s = session_from_termwin(tw);
+    NSWindow *w = s.window;
+    int action = conf_get_int(s->conf, CONF_resize_action);
+    if (action == RESIZE_DISABLED || action == RESIZE_FONT || w.isZoomed)
+        return;
     NSRect screen = (w.screen ?: NSScreen.mainScreen).frame;
     [w setFrameTopLeftPoint:NSMakePoint(screen.origin.x + x,
                                         NSMaxY(screen) - y)];
@@ -472,6 +479,17 @@ static const LogPolicyVtable mac_logpolicy_vt = {
         return;
     [super performClose:sender];
 }
+
+/* Zooming animates through intermediate frames, which in "Change font
+ * size only when maximised" mode must change the font, not the number
+ * of rows and columns. The animation is over when super returns. */
+- (void)zoom:(id)sender
+{
+    MTSession *s = self.session;
+    [s zoomWillStart];
+    [super zoom:sender];
+    [s zoomDidEnd];
+}
 @end
 
 @implementation MTSession {
@@ -484,6 +502,7 @@ static const LogPolicyVtable mac_logpolicy_vt = {
     void *reconfigWindow;
     BOOL closingConfirmed;
     BOOL inFullScreen;
+    BOOL fullScreenTransition, zooming;
     int eventLogDropped;
 }
 
@@ -649,27 +668,65 @@ static const LogPolicyVtable mac_logpolicy_vt = {
                 : 0;
 }
 
+/*
+ * Whether a change in the window's size changes the font (keeping the
+ * rows and columns) rather than the terminal size: always in "Change
+ * the size of the font" mode, and only while zoomed or in full screen
+ * in "Change font size only when maximised" mode.
+ */
+- (BOOL)fontFollowsWindow
+{
+    switch (conf_get_int(conf, CONF_resize_action)) {
+      case RESIZE_FONT:
+        return YES;
+      case RESIZE_EITHER:
+        return inFullScreen || fullScreenTransition || zooming ||
+            self.window.isZoomed;
+      default:
+        return NO;
+    }
+}
+
 - (void)applyWindowGeometryForCols:(int)cols rows:(int)rows
 {
     NSWindow *w = self.window;
-    NSSize tsize = [_termView sizeForCols:cols rows:rows];
-    NSSize csize = NSMakeSize(tsize.width + [self scrollbarWidth],
-                              tsize.height);
-    NSSize minsize = [_termView sizeForCols:2 rows:1];
-    minsize.width += [self scrollbarWidth];
+    BOOL fontmode = conf_get_int(conf, CONF_resize_action) == RESIZE_FONT;
+    CGFloat sw = [self scrollbarWidth];
 
     if ([self resizeForbidden]) {
         w.styleMask &= ~NSWindowStyleMaskResizable;
     } else {
         w.styleMask |= NSWindowStyleMaskResizable;
     }
-    w.contentResizeIncrements = NSMakeSize(_termView.fontWidth,
-                                           _termView.fontHeight);
-    w.contentMinSize = minsize;
+    if (fontmode) {
+        /* Any size will do; just keep the font legible. */
+        int b = _termView.border;
+        w.contentResizeIncrements = NSMakeSize(1, 1);
+        w.contentMinSize = NSMakeSize(cols * 2 + 2 * b + sw, rows * 4 + 2 * b);
+    } else {
+        NSSize minsize = [_termView sizeForCols:2 rows:1];
+        minsize.width += sw;
+        w.contentResizeIncrements = NSMakeSize(_termView.fontWidth,
+                                               _termView.fontHeight);
+        w.contentMinSize = minsize;
+    }
 
+    if (term && [self fontFollowsWindow] &&
+        (cols != term->cols || rows != term->rows))
+        term_size(term, rows, cols, conf_get_int(conf, CONF_savelines));
+
+    if (inFullScreen || fullScreenTransition || zooming || w.isZoomed) {
+        /* The window keeps its size: the font or the terminal adapts,
+         * as in reset_window() in Windows PuTTY. */
+        [self layoutContent];
+        [self terminalViewDidChangeSize];
+        return;
+    }
+
+    NSSize tsize = [_termView sizeForCols:cols rows:rows];
     NSRect frame = w.frame;
     NSRect newframe = [w frameRectForContentRect:
-                           NSMakeRect(0, 0, csize.width, csize.height)];
+                           NSMakeRect(0, 0, tsize.width + sw, tsize.height)];
     newframe.origin.x = frame.origin.x;
     newframe.origin.y = NSMaxY(frame) - newframe.size.height;
     [w setFrame:newframe display:YES];
@@ -692,33 +749,103 @@ static const LogPolicyVtable mac_logpolicy_vt = {
 {
     if (!term)
         return;
-    int cols, rows;
-    [_termView gridForSize:_termView.bounds.size cols:&cols rows:&rows];
-    if (cols != term->cols || rows != term->rows)
-        term_size(term, rows, cols, conf_get_int(conf, CONF_savelines));
+    if ([self fontFollowsWindow]) {
+        if ([_termView fitFontsFromConf:conf cols:term->cols rows:term->rows])
+            term_invalidate(term);
+    } else {
+        if (_termView.fontsFitted) {
+            /* Dragged out of a zoomed window: the configured font, and
+             * as many rows and columns of it as fit. */
+            [_termView setupFontsFromConf:conf];
+            term_invalidate(term);
+        }
+        int cols, rows;
+        [_termView gridForSize:_termView.bounds.size cols:&cols rows:&rows];
+        if (cols != term->cols || rows != term->rows)
+            term_size(term, rows, cols, conf_get_int(conf, CONF_savelines));
+    }
     NSSize px = _termView.bounds.size;
     term_notify_window_size_pixels(term, (int)px.width, (int)px.height);
+}
+
+/* After zooming or full screen: in "Change font size only when
+ * maximised" mode, back to the configured font and a window that fits
+ * it, as reset_window(wgs, 2) does in Windows PuTTY. */
+- (void)updateFontFitting
+{
+    if (term && [self fontFollowsWindow]) {
+        [self layoutContent];
+        [self terminalViewDidChangeSize];
+    } else if (term && _termView.fontsFitted) {
+        [_termView setupFontsFromConf:conf];
+        [self applyWindowGeometryForCols:term->cols rows:term->rows];
+        term_invalidate(term);
+    } else {
+        [self layoutContent];
+    }
 }
 
 - (void)requestResizeCols:(int)w rows:(int)h
 {
     NSWindow *win = self.window;
-    if (!inFullScreen && !win.isZoomed && ![self resizeForbidden] &&
-        conf_get_int(conf, CONF_resize_action) != RESIZE_FONT)
+    if ([self resizeForbidden] || (w == term->cols && h == term->rows)) {
+        /* nothing to do */
+    } else if ([self fontFollowsWindow]) {
+        /* The window stays as it is and the font changes to fit the new
+         * grid (wintw_request_resize in Windows PuTTY). */
+        term_size(term, h, w, conf_get_int(conf, CONF_savelines));
+        [self terminalViewDidChangeSize];
+    } else if (!inFullScreen && !win.isZoomed) {
         [self applyWindowGeometryForCols:w rows:h];
+    }
     term_resize_request_completed(term);
+}
+
+- (void)zoomWillStart
+{
+    zooming = YES;
+}
+
+- (void)zoomDidEnd
+{
+    zooming = NO;
+    [self updateFontFitting];
+}
+
+- (void)windowWillEnterFullScreen:(NSNotification *)n
+{
+    fullScreenTransition = YES;
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification *)n
 {
     inFullScreen = YES;
-    [self layoutContent];
+    fullScreenTransition = NO;
+    [self updateFontFitting];
+}
+
+- (void)windowDidFailToEnterFullScreen:(NSWindow *)window
+{
+    fullScreenTransition = NO;
+    [self updateFontFitting];
+}
+
+- (void)windowWillExitFullScreen:(NSNotification *)n
+{
+    fullScreenTransition = YES;
 }
 
 - (void)windowDidExitFullScreen:(NSNotification *)n
 {
     inFullScreen = NO;
-    [self layoutContent];
+    fullScreenTransition = NO;
+    [self updateFontFitting];
+}
+
+- (void)windowDidFailToExitFullScreen:(NSWindow *)window
+{
+    fullScreenTransition = NO;
+    [self updateFontFitting];
 }
 
 - (void)windowDidMove:(NSNotification *)n
@@ -852,6 +979,17 @@ static const LogPolicyVtable mac_logpolicy_vt = {
                                 blue:c.b/255.0 alpha:1];
 }
 
+NSPasteboard *mactty_pasteboard(void)
+{
+    static NSPasteboard *pb;
+    if (!pb) {
+        const char *name = getenv("MACTTY_PASTEBOARD");
+        pb = (name && *name) ? [NSPasteboard pasteboardWithName:@(name)]
+                             : NSPasteboard.generalPasteboard;
+    }
+    return pb;
+}
+
 - (void)clipWrite:(wchar_t *)text attrs:(int *)attrs
           colours:(truecolour *)colours length:(int)len
 {
@@ -860,7 +998,7 @@ static const LogPolicyVtable mac_logpolicy_vt = {
              encoding:NSUTF32LittleEndianStringEncoding];
     if (!str)
         return;
-    NSPasteboard *pb = NSPasteboard.generalPasteboard;
+    NSPasteboard *pb = mactty_pasteboard();
     [pb clearContents];
 
     if (!conf_get_bool(conf, CONF_rtf_paste) || !attrs) {
@@ -915,7 +1053,7 @@ static const LogPolicyVtable mac_logpolicy_vt = {
 
 - (void)pasteFromClipboard
 {
-    NSString *str = [NSPasteboard.generalPasteboard
+    NSString *str = [mactty_pasteboard()
                         stringForType:NSPasteboardTypeString];
     if (!str || !term)
         return;
@@ -1416,7 +1554,10 @@ static void after_change_settings(void *vctx, int retval)
         conf_get_bool(oldconf, CONF_utf8_override) !=
         conf_get_bool(newconf, CONF_utf8_override) ||
         conf_get_int(oldconf, CONF_vtmode) !=
-        conf_get_int(newconf, CONF_vtmode)) {
+        conf_get_int(newconf, CONF_vtmode) ||
+        (_termView.fontsFitted &&
+         conf_get_int(oldconf, CONF_resize_action) !=
+         conf_get_int(newconf, CONF_resize_action))) {
         NSString *err = [_termView setupFontsFromConf:conf];
         if (err) {
             mactty_message_box((__bridge void *)self.window,

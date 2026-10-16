@@ -77,6 +77,8 @@ char *mactty_font_display_name(const char *spec)
     CGFloat fontAscentF;
     int fontAscent;
     int fontQuality;
+    CGFloat glyphScaleX;            /* horizontal stretch of fitted fonts */
+    int offsetX, offsetY;           /* centring of a fitted grid */
 
     rgb palette[OSC4_NCOLOURS];
 
@@ -105,6 +107,7 @@ char *mactty_font_display_name(const char *spec)
         fallbackFonts = [NSCache new];
         markedText = @"";
         _border = 1;
+        glyphScaleX = 1;
         for (int i = 0; i < OSC4_NCOLOURS; i++)
             palette[i] = (rgb){0, 0, 0};
         palette[OSC4_COLOUR_fg] = palette[OSC4_COLOUR_fg_bold] =
@@ -130,7 +133,33 @@ char *mactty_font_display_name(const char *spec)
  * Fonts and geometry.
  */
 
-- (NSString *)setupFontsFromConf:(Conf *)conf
+/* Cell width from the advance of a representative glyph. */
+static CGFloat font_advance(CTFontRef font)
+{
+    UniChar ch = 'M';
+    CGGlyph glyph;
+    CGSize advance = CGSizeZero;
+    CTFontGetGlyphsForCharacters(font, &ch, &glyph, 1);
+    CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal,
+                               &glyph, &advance, 1);
+    return advance.width;
+}
+
+static int font_cell_height(CTFontRef font)
+{
+    return (int)ceil(CTFontGetAscent(font)) +
+        (int)ceil(CTFontGetDescent(font)) +
+        (int)round(CTFontGetLeading(font));
+}
+
+/*
+ * Loads the fonts named in conf. Given a cell size, the fonts are scaled
+ * to fill cells of exactly that size, as init_fonts() in Windows PuTTY
+ * does when it is passed a width and height: the point size follows the
+ * cell height and the glyphs are stretched horizontally to the width.
+ */
+- (NSString *)loadFontsFromConf:(Conf *)conf cellWidth:(int)cellw
+                         height:(int)cellh
 {
     FontSpec *fs = conf_get_fontspec(conf, CONF_font);
     CTFontRef font = font_from_spec(fs->name);
@@ -138,10 +167,40 @@ char *mactty_font_display_name(const char *spec)
         return [NSString stringWithFormat:@"unable to load font \"%s\"",
                 fs->name];
 
+    int width = (int)ceil(font_advance(font) - 0.01);
+    int height = font_cell_height(font);
+    CGFloat scale = 1;
+    if (cellw > 0 && cellh > 0 && (cellw != width || cellh != height)) {
+        CGFloat size = CTFontGetSize(font) * cellh /
+            (CTFontGetAscent(font) + CTFontGetDescent(font) +
+             CTFontGetLeading(font));
+        CTFontRef scaled;
+        for (;;) {
+            scaled = CTFontCreateCopyWithAttributes(font, size, NULL, NULL);
+            if (font_cell_height(scaled) <= cellh || size <= 1)
+                break;
+            CFRelease(scaled);
+            size -= 0.25;
+        }
+        CFRelease(font);
+        font = scaled;
+        CGFloat advance = font_advance(font);
+        if (advance > 0)
+            scale = cellw / advance;
+        width = cellw;
+        height = cellh;
+    }
+
     CTFontRef bold = NULL;
     FontSpec *bfs = conf_get_fontspec(conf, CONF_boldfont);
     if (bfs->name[0])
         bold = font_from_spec(bfs->name);
+    if (bold && scale != 1) {
+        CTFontRef scaled = CTFontCreateCopyWithAttributes(
+            bold, CTFontGetSize(font), NULL, NULL);
+        CFRelease(bold);
+        bold = scaled;
+    }
     if (!bold)
         bold = CTFontCreateCopyWithSymbolicTraits(
             font, 0, NULL, kCTFontBoldTrait, kCTFontBoldTrait);
@@ -153,21 +212,56 @@ char *mactty_font_display_name(const char *spec)
     fonts[1] = bold;
     [fallbackFonts removeAllObjects];
 
-    /* Cell size from the advance of a representative glyph. */
-    UniChar ch = 'M';
-    CGGlyph glyph;
-    CGSize advance = CGSizeZero;
-    CTFontGetGlyphsForCharacters(font, &ch, &glyph, 1);
-    CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal,
-                               &glyph, &advance, 1);
     fontAscentF = CTFontGetAscent(font);
-    _fontWidth = (int)ceil(advance.width - 0.01);
     fontAscent = (int)ceil(fontAscentF);
-    _fontHeight = fontAscent + (int)ceil(CTFontGetDescent(font)) +
-        (int)round(CTFontGetLeading(font));
-    if (_fontWidth < 1) _fontWidth = 1;
-    if (_fontHeight < 1) _fontHeight = 1;
+    glyphScaleX = scale;
+    _fontWidth = width < 1 ? 1 : width;
+    _fontHeight = height < 1 ? 1 : height;
     return nil;
+}
+
+- (NSString *)setupFontsFromConf:(Conf *)conf
+{
+    NSString *err = [self loadFontsFromConf:conf cellWidth:0 height:0];
+    if (!err) {
+        _fontsFitted = NO;
+        offsetX = offsetY = 0;
+    }
+    return err;
+}
+
+- (BOOL)fitFontsFromConf:(Conf *)conf cols:(int)cols rows:(int)rows
+{
+    /* The equivalent of the font branch of reset_window() in Windows
+     * PuTTY: whole cells, the remainder split round the edges. */
+    NSSize size = self.bounds.size;
+    int cellw = ((int)size.width - 2 * _border) / cols;
+    int cellh = ((int)size.height - 2 * _border) / rows;
+    if (cellw < 1) cellw = 1;
+    if (cellh < 1) cellh = 1;
+
+    BOOL changed = NO;
+    if (!_fontsFitted || cellw != _fontWidth || cellh != _fontHeight) {
+        if ([self loadFontsFromConf:conf cellWidth:cellw height:cellh])
+            return NO;              /* keep the fonts we have */
+        _fontsFitted = YES;
+        changed = YES;
+    }
+    int ox = ((int)size.width - 2 * _border - cols * _fontWidth) / 2;
+    int oy = ((int)size.height - 2 * _border - rows * _fontHeight) / 2;
+    if (ox < 0) ox = 0;
+    if (oy < 0) oy = 0;
+    if (ox != offsetX || oy != offsetY) {
+        offsetX = ox;
+        offsetY = oy;
+        changed = YES;
+    }
+    if (changed) {
+        /* Cells now cover different pixels: clear what they left. */
+        [self fillBackingWithBackground];
+        [self setNeedsDisplay:YES];
+    }
+    return changed;
 }
 
 - (void)setFontQuality:(int)quality
@@ -399,7 +493,7 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
 
     CGContextSaveGState(ctx);
     CGContextTranslateCTM(ctx, 0, fontAscent);
-    CGContextScaleCTM(ctx, 1, -1);
+    CGContextScaleCTM(ctx, glyphScaleX, -1);
 
     for (int i = 0; i <= len; i++) {
         CGGlyph glyph = 0;
@@ -418,15 +512,16 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
             CGSize adv;
             CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal,
                                        &glyph, &adv, 1);
+            CGFloat w = adv.width * glyphScaleX;
             x = i * cellw;
-            if (adv.width < cellw - 0.5)
-                x += (cellw - adv.width) / 2;  /* centre narrow glyphs */
+            if (w < cellw - 0.5)
+                x += (cellw - w) / 2;          /* centre narrow glyphs */
         }
         if (n > 0 && (i == len || font != runfont)) {
             CTFontDrawGlyphs(runfont, glyphs, positions, n, ctx);
             if (shadow) {
                 for (int k = 0; k < n; k++)
-                    positions[k].x += 1;
+                    positions[k].x += 1 / glyphScaleX;
                 CTFontDrawGlyphs(runfont, glyphs, positions, n, ctx);
             }
             n = 0;
@@ -435,7 +530,7 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
             break;
         runfont = font;
         glyphs[n] = glyph;
-        positions[n] = CGPointMake(x, 0);
+        positions[n] = CGPointMake(x / glyphScaleX, 0);
         n++;
     }
     CGContextRestoreGState(ctx);
@@ -458,13 +553,14 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
         [[NSAttributedString alloc] initWithString:str attributes:attrs];
     CTLineRef line = CTLineCreateWithAttributedString(
         (__bridge CFAttributedStringRef)astr);
-    double width = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+    double width = CTLineGetTypographicBounds(line, NULL, NULL, NULL) *
+        glyphScaleX;
     CGFloat x = width < cellw ? (cellw - width) / 2 : 0;
     CGContextSaveGState(backing);
     CGContextTranslateCTM(backing, 0, fontAscent);
-    CGContextScaleCTM(backing, 1, -1);
+    CGContextScaleCTM(backing, glyphScaleX, -1);
     CGContextSetTextMatrix(backing, CGAffineTransformIdentity);
-    CGContextSetTextPosition(backing, x, 0);
+    CGContextSetTextPosition(backing, x / glyphScaleX, 0);
     CTLineDraw(line, backing);
     CGContextRestoreGState(backing);
     CFRelease(line);
@@ -527,8 +623,8 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
         rlen = len;
 
     CGContextRef ctx = backing;
-    CGRect cell = CGRectMake(x * _fontWidth + _border,
-                             y * _fontHeight + _border,
+    CGRect cell = CGRectMake(x * _fontWidth + _border + offsetX,
+                             y * _fontHeight + _border + offsetY,
                              rlen * widefactor * _fontWidth, _fontHeight);
     CGContextSaveGState(ctx);
     CGContextClipToRect(ctx, cell);
@@ -628,7 +724,8 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
     CGContextRef ctx = backing;
     if (!ctx)
         return;
-    CGFloat cx = x * _fontWidth + _border, cy = y * _fontHeight + _border;
+    CGFloat cx = x * _fontWidth + _border + offsetX;
+    CGFloat cy = y * _fontHeight + _border + offsetY;
     CGContextSaveGState(ctx);
     CGContextSetShouldAntialias(ctx, false);
     CGContextSetLineWidth(ctx, 1);
@@ -674,7 +771,8 @@ static void set_stroke_rgb(CGContextRef ctx, rgb c, bool dim)
 {
     if (!backing)
         return;
-    CGRect r = CGRectMake(x * _fontWidth + _border, y * _fontHeight + _border,
+    CGRect r = CGRectMake(x * _fontWidth + _border + offsetX,
+                          y * _fontHeight + _border + offsetY,
                           2 * _fontWidth, _fontHeight);
     CGFloat side = MIN(r.size.width, r.size.height);
     CGRect icon = CGRectMake(r.origin.x + (r.size.width - side) / 2,
@@ -832,6 +930,28 @@ static char numeric_keypad_key(unsigned short kc, bool *numeric)
     return [super performKeyEquivalent:event];
 }
 
+#ifdef MACTTY_TEST_HOOKS
+static NSMenuItem *menu_item_for_shortcut(NSMenu *menu, NSEvent *event)
+{
+    NSEventModifierFlags mods = event.modifierFlags &
+        (NSEventModifierFlagCommand | NSEventModifierFlagShift |
+         NSEventModifierFlagOption | NSEventModifierFlagControl);
+    for (NSMenuItem *item in menu.itemArray) {
+        if (item.submenu) {
+            NSMenuItem *found = menu_item_for_shortcut(item.submenu, event);
+            if (found)
+                return found;
+        } else if (item.keyEquivalent.length &&
+                   item.keyEquivalentModifierMask == mods &&
+                   [item.keyEquivalent isEqualToString:
+                        event.charactersIgnoringModifiers.lowercaseString]) {
+            return item;
+        }
+    }
+    return nil;
+}
+#endif
+
 - (void)keyDown:(NSEvent *)event
 {
     MTSession *s = self.session;
@@ -839,6 +959,21 @@ static char numeric_keypad_key(unsigned short kc, bool *numeric)
     Conf *conf = s ? s->conf : NULL;
     if (!term)
         return;
+
+#ifdef MACTTY_TEST_HOOKS
+    /* Test builds: an app in the background has no key window, so its
+     * menu shortcuts find no target and reach us as plain key presses.
+     * Send the menu item's action up the responder chain from here, as
+     * the menu would for the key window. */
+    if (!NSApp.isActive && !s->command_meta &&
+        (event.modifierFlags & NSEventModifierFlagCommand)) {
+        NSMenuItem *item = menu_item_for_shortcut(NSApp.mainMenu, event);
+        if (item.action) {
+            [self tryToPerform:item.action with:item];
+            return;
+        }
+    }
+#endif
 
     NSEventModifierFlags flags = event.modifierFlags;
     bool shift = flags & NSEventModifierFlagShift;
@@ -1233,8 +1368,8 @@ static char numeric_keypad_key(unsigned short kc, bool *numeric)
 - (NSRect)firstRectForCharacterRange:(NSRange)range
                          actualRange:(NSRangePointer)actual
 {
-    NSRect r = NSMakeRect(cursorX * _fontWidth + _border,
-                          cursorY * _fontHeight + _border,
+    NSRect r = NSMakeRect(cursorX * _fontWidth + _border + offsetX,
+                          cursorY * _fontHeight + _border + offsetY,
                           _fontWidth, _fontHeight);
     r = [self convertRect:r toView:nil];
     return [self.window convertRectToScreen:r];
@@ -1247,8 +1382,8 @@ static char numeric_keypad_key(unsigned short kc, bool *numeric)
 - (void)cellForEvent:(NSEvent *)event x:(int *)x y:(int *)y
 {
     NSPoint p = [self convertPoint:event.locationInWindow fromView:nil];
-    int cx = (int)floor((p.x - _border) / _fontWidth);
-    int cy = (int)floor((p.y - _border) / _fontHeight);
+    int cx = (int)floor((p.x - _border - offsetX) / _fontWidth);
+    int cy = (int)floor((p.y - _border - offsetY) / _fontHeight);
     *x = cx;
     *y = cy;
 }
@@ -1289,6 +1424,16 @@ static Mouse_Action click_action(NSEvent *event)
       default: return MA_CLICK;
     }
 }
+
+#ifdef MACTTY_TEST_HOOKS
+/* Test builds (./build.sh test) act on a click while in the background,
+ * so that automated tests can post mouse events to this process without
+ * activating it and taking the user's keyboard focus. */
+- (BOOL)acceptsFirstMouse:(NSEvent *)event
+{
+    return YES;
+}
+#endif
 
 - (BOOL)wantsContextMenuForEvent:(NSEvent *)event isRight:(BOOL)right
 {

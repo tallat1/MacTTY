@@ -61,6 +61,11 @@ typedef struct MacFrontend {
 
 @end
 
+/* The pasteboard that Copy and Paste use: the general pasteboard, or
+ * the one named by the environment variable MACTTY_PASTEBOARD, so that
+ * automated tests never touch the user's clipboard. */
+NSPasteboard *mactty_pasteboard(void);
+
 /* Dialogs.m: the per-session prompts. */
 SeatPromptResult mac_seat_confirm_ssh_host_key(
     Seat *seat, const char *host, int port, const char *keytype,
