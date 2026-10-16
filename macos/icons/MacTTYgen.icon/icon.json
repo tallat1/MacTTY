@@ -3,8 +3,8 @@
     {
       "value": {
         "linear-gradient": [
-          "srgb:0.14118,0.20392,0.29020,1.00000",
-          "srgb:0.08627,0.12941,0.18824,1.00000"
+          "srgb:0.16863,0.22745,0.36078,1.00000",
+          "srgb:0.04706,0.07059,0.13333,1.00000"
         ],
         "orientation": {
           "start": {
@@ -13,7 +13,7 @@
           },
           "stop": {
             "x": 0.5,
-            "y": 0.7
+            "y": 0.85
           }
         }
       }
@@ -22,8 +22,8 @@
       "appearance": "dark",
       "value": {
         "linear-gradient": [
-          "srgb:0.12549,0.17255,0.23922,1.00000",
-          "srgb:0.07843,0.10588,0.14902,1.00000"
+          "srgb:0.11765,0.15686,0.25098,1.00000",
+          "srgb:0.02745,0.04314,0.07843,1.00000"
         ],
         "orientation": {
           "start": {
@@ -32,7 +32,7 @@
           },
           "stop": {
             "x": 0.5,
-            "y": 0.7
+            "y": 0.85
           }
         }
       }
@@ -49,13 +49,14 @@
         }
       ],
       "shadow": {
-        "kind": "neutral",
+        "kind": "layer-color",
         "opacity": 0.5
       },
       "translucency": {
         "enabled": false,
         "value": 0.5
-      }
+      },
+      "specular": true
     },
     {
       "name": "Key",
@@ -63,7 +64,7 @@
         {
           "name": "Key",
           "image-name": "key.svg",
-          "glass": false
+          "glass": true
         }
       ],
       "shadow": {
@@ -73,25 +74,8 @@
       "translucency": {
         "enabled": false,
         "value": 0.5
-      }
-    },
-    {
-      "name": "Screen",
-      "layers": [
-        {
-          "name": "Screen",
-          "image-name": "screen.svg",
-          "glass": false
-        }
-      ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
       },
-      "translucency": {
-        "enabled": false,
-        "value": 0.5
-      }
+      "specular": true
     }
   ],
   "supported-platforms": {

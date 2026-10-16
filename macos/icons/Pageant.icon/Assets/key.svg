@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <g transform="scale(1.242718) translate(-100 -100)">
-    <path fill-rule="evenodd" fill="#34E06B" d="M 377.2 505 A 72.6 72.6 0 1 0 232.0 505 A 72.6 72.6 0 1 0 377.2 505 Z M 337.3 505 A 32.7 32.7 0 1 0 271.9 505 A 32.7 32.7 0 1 0 337.3 505 Z"/>
-    <rect x="362.7" y="489.0" width="199.3" height="31.9" fill="#34E06B"/>
-    <rect x="496.7" y="515.9" width="23.2" height="50.8" fill="#34E06B"/>
-    <rect x="536.6" y="515.9" width="23.2" height="50.8" fill="#34E06B"/>
-  </g>
+<path fill-rule="evenodd" fill="#FFFFFF" d="M 362 612 A 100 100 0 1 0 162 612 A 100 100 0 1 0 362 612 Z M 304 612 A 42 42 0 1 0 220 612 A 42 42 0 1 0 304 612 Z"/>
+<rect x="338" y="584" width="228" height="56" rx="28" fill="#FFFFFF"/>
+<rect x="454" y="612" width="42" height="110" rx="14" fill="#FFFFFF"/>
+<rect x="524" y="612" width="42" height="84" rx="14" fill="#FFFFFF"/>
 </svg>
