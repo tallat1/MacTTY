@@ -47,8 +47,8 @@ AppKit ile yazılmıştır.
 - **Hepsi tek pakette.** MacTTYgen (PuTTYgen), Pageant ve `plink`, `pscp`,
   `psftp`, `puttygen`, `pageant` komut satırı araçları uygulamanın içinde
   gelir.
-- **Universal ve hafif.** Apple silicon ve Intel için tek uygulama, yaklaşık
-  6,5 MB'lık bir DMG. AES ve SHA donanım hızlandırması iki mimaride de açık.
+- **Universal.** Apple silicon ve Intel için tek uygulama. AES ve SHA donanım
+  hızlandırması iki mimaride de açık.
 
 ## Kurulum
 
