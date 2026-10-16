@@ -26,6 +26,15 @@ kayıtlı oturum biçimi PuTTY ile birebir aynıdır.
   çubuğunda hem terminalde Ctrl+tıkla açılan menüde.
 - **Güvenlik uyarıları:** host key, zayıf şifre ve log dosyası soruları
   PuTTY'nin kendi metinleriyle.
+- **MacTTYgen (PuTTYgen):** anahtar üretici; PuTTYgen penceresinin Key /
+  Actions / Parameters kutuları, File / Key / Conversions menüleri,
+  fareyle rastgelelik toplama, PPK kayıt parametreleri, OpenSSH ve
+  ssh.com içe/dışa aktarma, sertifika ekleme/çıkarma.
+- **Pageant:** SSH ajanı; menü çubuğu simgesi (PuTTY'nin bildirim alanı
+  menüsü), anahtar listesi penceresi (Add Key, Add Key (encrypted),
+  Re-encrypt, Remove), istek gelince parola sorarak açılan şifreli
+  anahtarlar. MacTTY oturumları Pageant çalışıyorsa onu kullanır;
+  OpenSSH (`ssh`, `ssh-add`, `git`) de aynı soketi kullanabilir.
 - **Komut satırı araçları:** `plink`, `pscp`, `psftp`, `puttygen`,
   `pageant` uygulama paketinin içinde: `MacTTY.app/Contents/Resources/bin`.
 
@@ -72,6 +81,43 @@ aynı oturumları kullanır.
 Seçim PuTTY'deki gibi otomatik olarak panoya kopyalanır, sağ tık
 yapıştırır. Command+C / Command+V de çalışır.
 
+## MacTTYgen ve Pageant
+
+İkisi de MacTTY menüsünden açılır (**MacTTYgen Key Generator**,
+**Pageant SSH Agent**). Windows'taki gibi ayrı programlardır ve
+`MacTTY.app/Contents/Applications` içinde dururlar; MacTTY.app'i
+taşıyınca onlar da gelir. Ayrı olmalarının nedenleri: Pageant terminal
+pencereleri kapansa da çalışmayı sürdürmeli (MacTTY son pencere
+kapanınca PuTTY gibi kapanır), menü çubuğunda Dock simgesi olmadan
+yaşamalı; MacTTYgen anahtarı ayrı bir iş parçacığında üretir ve PuTTY'nin
+rastgele sayı havuzu iş parçacığı güvenli değildir, o yüzden canlı SSH
+oturumlarıyla aynı süreçte olmamalı.
+
+**MacTTYgen** PuTTYgen'in komut satırını da alır:
+
+```bash
+build/MacTTY.app/Contents/Applications/MacTTYgen.app/Contents/MacOS/MacTTYgen -t ed25519
+```
+
+(`-t rsa|dsa|ecdsa|eddsa|ed25519|ed448|rsa1`, `-b bit`, `-E md5|sha256`,
+`-primes`, `-strong-rsa`, `-ppk-param`, yüklenecek anahtar dosyası.)
+
+**Pageant** soketini Unix Pageant gibi `/tmp/pageant.<kullanıcı>/`
+altında açar ve sabit bir bağlantıyla gösterir:
+`~/.putty/pageant.sock`. MacTTY her bağlantıdan önce buna bakar; Pageant
+çalışıyorsa onu, çalışmıyorsa başlatıldığı ajanı (macOS'in ssh-agent'ı)
+kullanır. OpenSSH araçları için:
+
+```bash
+export SSH_AUTH_SOCK=~/.putty/pageant.sock
+```
+
+ya da `~/.ssh/config` içinde `IdentityAgent ~/.putty/pageant.sock`.
+Anahtar listesi penceresi bu yolu gösterir ve "Copy Command" ile
+kopyalar. Komut satırında anahtar dosyaları verilebilir (`--encrypted`
+ile şifreli yüklenir, `-keylist` listeyi açar); Pageant zaten
+çalışıyorsa dosyalar ona eklenir.
+
 ## Yapı
 
 ```
@@ -87,6 +133,10 @@ macos/      Cocoa ön yüzü
   config-mac.c     Mac'e özgü ayar seçenekleri (windows/config.c karşılığı)
   platform-mac.m   platform varsayılanları, seri port listesi
   AppDelegate.m    menü çubuğu, açılış, komut satırı
+  Keygen.m         MacTTYgen (windows/puttygen.c karşılığı)
+  Pageant.m        Pageant ön yüzü (windows/pageant.c karşılığı)
+  pageant-socket.c Pageant soketinin yeri; MacTTY'nin ajan seçimi
+  tools.m          MacTTYgen ve Pageant'ın ortak diyalogları
 ```
 
 PuTTY kaynağında tek değişiklik vardır: `putty/unix/platform.h` içinde
@@ -96,7 +146,6 @@ yeniden uygulamak yeterlidir (`git log -p putty/unix/platform.h`).
 
 ## Henüz olmayanlar
 
-- PuTTYgen ve Pageant'ın grafik arayüzleri (komut satırı sürümleri pakette).
 - "When window is resized: Change the size of the font" seçeneği
   (satır/sütun değiştirme çalışıyor).
 - Uzaktan yazdırma denenmedi.

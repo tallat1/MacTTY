@@ -1,12 +1,42 @@
-// make-icon.swift: draws the MacTTY application icon.
+// make-icon.swift: draws the MacTTY application icons.
 //
 //   swift macos/make-icon.swift macos/MacTTY.icns
+//   swift macos/make-icon.swift macos/MacTTYgen.icns keygen
+//   swift macos/make-icon.swift macos/Pageant.icns pageant
 //
 // A dark terminal with a green prompt and PuTTY's yellow lightning bolt
-// as a nod to where it comes from. The .icns is committed; rerun this
-// only when the design changes.
+// as a nod to where it comes from. The key generator's terminal holds a
+// key instead of the prompt; Pageant's key wears a top hat, after the
+// pun in PuTTY's own Pageant icon. The .icns files are committed; rerun
+// this only when the design changes.
 
 import AppKit
+
+let variant = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "mactty"
+
+// A key lying along the x axis, bow at the left, at (x, y) with length l.
+func drawKey(x: CGFloat, y: CGFloat, l: CGFloat, s: CGFloat) {
+    let gold = NSColor(srgbRed: 1.0, green: 0.80, blue: 0.0, alpha: 1)
+    let edge = NSColor(srgbRed: 0.55, green: 0.38, blue: 0.0, alpha: 1)
+    let r = l * 0.22
+    let key = NSBezierPath()
+    key.appendOval(in: NSRect(x: x, y: y - r, width: 2 * r, height: 2 * r))
+    key.append(NSBezierPath(rect: NSRect(x: x + 1.8 * r, y: y - r * 0.22,
+                                         width: l - 1.8 * r, height: r * 0.44)))
+    key.append(NSBezierPath(rect: NSRect(x: x + l - r * 0.9, y: y - r * 0.85,
+                                         width: r * 0.32, height: r * 0.7)))
+    key.append(NSBezierPath(rect: NSRect(x: x + l - r * 0.35, y: y - r * 0.85,
+                                         width: r * 0.32, height: r * 0.7)))
+    gold.setFill()
+    key.fill()
+    edge.setStroke()
+    key.lineWidth = 10 * s
+    key.stroke()
+    // the hole in the bow
+    NSColor(srgbRed: 0.02, green: 0.03, blue: 0.04, alpha: 1).setFill()
+    NSBezierPath(ovalIn: NSRect(x: x + r * 0.55, y: y - r * 0.45,
+                                width: r * 0.9, height: r * 0.9)).fill()
+}
 
 func drawIcon(size: CGFloat) -> NSBitmapImageRep {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size),
@@ -41,13 +71,33 @@ func drawIcon(size: CGFloat) -> NSBitmapImageRep {
     screenPath.lineWidth = 10 * s
     screenPath.stroke()
 
-    // ">_" prompt in PuTTY's cursor green.
-    let green = NSColor(srgbRed: 0.0, green: 1.0, blue: 0.0, alpha: 1)
-    let font = NSFont.monospacedSystemFont(ofSize: 250 * s, weight: .bold)
-    NSAttributedString(string: ">", attributes: [.font: font, .foregroundColor: green])
-        .draw(at: NSPoint(x: 240 * s, y: 330 * s))
-    green.setFill()
-    NSRect(x: 420 * s, y: 360 * s, width: 150 * s, height: 34 * s).fill()
+    if variant == "mactty" {
+        // ">_" prompt in PuTTY's cursor green.
+        let green = NSColor(srgbRed: 0.0, green: 1.0, blue: 0.0, alpha: 1)
+        let font = NSFont.monospacedSystemFont(ofSize: 250 * s, weight: .bold)
+        NSAttributedString(string: ">", attributes: [.font: font, .foregroundColor: green])
+            .draw(at: NSPoint(x: 240 * s, y: 330 * s))
+        green.setFill()
+        NSRect(x: 420 * s, y: 360 * s, width: 150 * s, height: 34 * s).fill()
+    } else {
+        drawKey(x: 200 * s, y: 430 * s, l: 330 * s, s: s)
+    }
+    if variant == "pageant" {
+        // A top hat on the key's bow.
+        let hat = NSBezierPath()
+        hat.append(NSBezierPath(roundedRect: NSRect(x: 158 * s, y: 508 * s,
+                                                    width: 230 * s, height: 30 * s),
+                                xRadius: 12 * s, yRadius: 12 * s))
+        hat.append(NSBezierPath(rect: NSRect(x: 198 * s, y: 533 * s,
+                                             width: 150 * s, height: 150 * s)))
+        NSColor(srgbRed: 0.10, green: 0.10, blue: 0.12, alpha: 1).setFill()
+        hat.fill()
+        NSColor(srgbRed: 0.75, green: 0.78, blue: 0.82, alpha: 1).setStroke()
+        hat.lineWidth = 8 * s
+        hat.stroke()
+        NSColor(srgbRed: 0.80, green: 0.10, blue: 0.10, alpha: 1).setFill()
+        NSRect(x: 202 * s, y: 548 * s, width: 142 * s, height: 26 * s).fill()
+    }
 
     // Lightning bolt.
     let bolt = NSBezierPath()

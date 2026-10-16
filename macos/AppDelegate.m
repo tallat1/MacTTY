@@ -204,6 +204,63 @@ NSMenu *mactty_saved_sessions_menu(void)
     mac_about_box();
 }
 
+/*
+ * The companion tools, PuTTYgen (here MacTTYgen) and Pageant. They are
+ * separate applications, as on Windows, kept inside MacTTY.app in
+ * Contents/Applications (see targets.cmake).
+ */
+- (void)openTool:(NSString *)name
+{
+    NSURL *url = [NSBundle.mainBundle.bundleURL URLByAppendingPathComponent:
+        [NSString stringWithFormat:@"Contents/Applications/%@.app", name]];
+    NSWorkspaceOpenConfiguration *cfg =
+        [NSWorkspaceOpenConfiguration configuration];
+    const char *bg = getenv("MACTTY_BACKGROUND");
+    cfg.activates = !(bg && *bg && *bg != '0');
+    /* Same configuration directory, agent and test settings as ours. */
+    cfg.environment = NSProcessInfo.processInfo.environment;
+    [NSWorkspace.sharedWorkspace openApplicationAtURL:url configuration:cfg
+                                    completionHandler:
+        ^(NSRunningApplication *app, NSError *err) {
+        if (!err)
+            return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            char *title = dupcat(appname, " Error");
+            char *msg = dupprintf("Unable to start %s:\n%s", name.UTF8String,
+                                  err.localizedDescription.UTF8String);
+            mactty_message_box(NULL, title, msg);
+            sfree(title);
+            sfree(msg);
+        });
+    }];
+}
+
+- (IBAction)openKeyGenerator:(id)sender
+{
+    [self openTool:@"MacTTYgen"];
+}
+
+- (IBAction)openPageant:(id)sender
+{
+    [self openTool:@"Pageant"];
+}
+
+/* Pageant's "New Session" and "Saved Sessions" (see Pageant.m). */
+- (void)openSessionRequest:(NSNotification *)n
+{
+    NSNumber *pid = n.userInfo[@"pid"];
+    if (![pid isKindOfClass:NSNumber.class] || pid.intValue != getpid())
+        return;
+    NSString *name = n.userInfo[@"session"];
+    if ([name isKindOfClass:NSString.class]) {
+        NSMenuItem *it = [[NSMenuItem alloc] init];
+        it.representedObject = name;
+        [self openSavedSession:it];
+    } else {
+        [self newSession:nil];
+    }
+}
+
 - (IBAction)showManual:(id)sender
 {
     [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:
@@ -234,6 +291,11 @@ static NSMenuItem *add_item(NSMenu *m, NSString *title, SEL action,
     NSMenu *appMenu = [[NSMenu alloc] initWithTitle:app];
     add_item(appMenu, [@"About " stringByAppendingString:app],
              @selector(showAbout:), nil, 0).target = self;
+    [appMenu addItem:[NSMenuItem separatorItem]];
+    add_item(appMenu, @"MacTTYgen Key Generator",
+             @selector(openKeyGenerator:), nil, 0).target = self;
+    add_item(appMenu, @"Pageant SSH Agent",
+             @selector(openPageant:), nil, 0).target = self;
     [appMenu addItem:[NSMenuItem separatorItem]];
     NSMenu *services = [[NSMenu alloc] initWithTitle:@"Services"];
     [appMenu addItemWithTitle:@"Services" action:NULL keyEquivalent:@""]
@@ -361,6 +423,10 @@ static NSMenuItem *add_item(NSMenu *m, NSString *title, SEL action,
 - (void)applicationDidFinishLaunching:(NSNotification *)n
 {
     [self buildMainMenu];
+    [NSDistributedNotificationCenter.defaultCenter
+        addObserver:self selector:@selector(openSessionRequest:)
+               name:@MACTTY_OPEN_SESSION_NOTIFICATION object:nil
+ suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
 
     Conf *conf = conf_new();
     if (do_cmdline(saved_argc, saved_argv, false, conf))

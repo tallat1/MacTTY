@@ -15,6 +15,7 @@ set(MACTTY_OBJC_SOURCES
 add_executable(MacTTY MACOSX_BUNDLE
   ${MACTTY_OBJC_SOURCES}
   ${MACTTY_DIR}/config-mac.c
+  ${MACTTY_DIR}/pageant-socket.c
   ${CMAKE_SOURCE_DIR}/unix/unicode.c
   ${CMAKE_SOURCE_DIR}/unix/printing.c
   ${CMAKE_SOURCE_DIR}/unix/config-unix.c
@@ -48,6 +49,69 @@ set_target_properties(MacTTY PROPERTIES
   LINK_INTERFACE_MULTIPLICITY 2
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
   MACOSX_BUNDLE_INFO_PLIST ${MACTTY_DIR}/Info.plist.in)
+
+# The companion tools, PuTTYgen and Pageant, are separate applications
+# as they are on Windows (see README: one process per tool keeps the
+# key generator's worker thread away from live sessions' random pool,
+# and lets the agent outlive the terminal windows). They are built
+# straight into MacTTY.app/Contents/Applications, so that MacTTY can
+# start them from its menu and they travel with it.
+set(MACTTY_TOOLS_DIR ${CMAKE_BINARY_DIR}/MacTTY.app/Contents/Applications)
+
+set(MACTTYGEN_OBJC_SOURCES
+  ${MACTTY_DIR}/Keygen.m
+  ${MACTTY_DIR}/tools.m)
+add_executable(MacTTYgen MACOSX_BUNDLE
+  ${MACTTYGEN_OBJC_SOURCES}
+  ${CMAKE_SOURCE_DIR}/stubs/no-timing.c
+  ${CMAKE_SOURCE_DIR}/unix/keygen-noise.c
+  ${CMAKE_SOURCE_DIR}/unix/no-gtk.c
+  ${CMAKE_SOURCE_DIR}/unix/noise.c
+  ${CMAKE_SOURCE_DIR}/unix/storage.c
+  ${CMAKE_SOURCE_DIR}/sshpubk.c
+  ${CMAKE_SOURCE_DIR}/sshrand.c
+  ${MACTTY_DIR}/MacTTYgen.icns)
+set_source_files_properties(${MACTTY_DIR}/MacTTYgen.icns
+  PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+add_dependencies(MacTTYgen generated_licence_h)
+target_include_directories(MacTTYgen PRIVATE ${MACTTY_DIR})
+set_source_files_properties(${MACTTYGEN_OBJC_SOURCES}
+  PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+target_link_libraries(MacTTYgen keygen crypto utils
+  "-framework Cocoa" "-framework UniformTypeIdentifiers")
+set_target_properties(MacTTYgen PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${MACTTY_TOOLS_DIR}
+  MACOSX_BUNDLE_INFO_PLIST ${MACTTY_DIR}/MacTTYgen-Info.plist.in)
+add_dependencies(MacTTY MacTTYgen)
+
+set(PAGEANT_OBJC_SOURCES
+  ${MACTTY_DIR}/Pageant.m
+  ${MACTTY_DIR}/tools.m
+  ${MACTTY_DIR}/eventloop.m)
+add_executable(Pageant MACOSX_BUNDLE
+  ${PAGEANT_OBJC_SOURCES}
+  ${MACTTY_DIR}/pageant-socket.c
+  ${CMAKE_SOURCE_DIR}/stubs/no-gss.c
+  ${CMAKE_SOURCE_DIR}/unix/noise.c
+  ${CMAKE_SOURCE_DIR}/unix/unicode.c
+  ${CMAKE_SOURCE_DIR}/unix/no-gtk.c
+  ${CMAKE_SOURCE_DIR}/ssh/x11fwd.c
+  ${CMAKE_SOURCE_DIR}/proxy/nosshproxy.c
+  ${MACTTY_DIR}/Pageant.icns)
+set_source_files_properties(${MACTTY_DIR}/Pageant.icns
+  PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+be_list(Pageant Pageant)
+add_dependencies(Pageant generated_licence_h)
+target_include_directories(Pageant PRIVATE ${MACTTY_DIR})
+set_source_files_properties(${PAGEANT_OBJC_SOURCES}
+  PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+target_link_libraries(Pageant
+  eventloop agent settings network crypto utils
+  "-framework Cocoa")
+set_target_properties(Pageant PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${MACTTY_TOOLS_DIR}
+  MACOSX_BUNDLE_INFO_PLIST ${MACTTY_DIR}/Pageant-Info.plist.in)
+add_dependencies(MacTTY Pageant)
 
 # PuTTY must never be built with NDEBUG; setup.cmake strips it from the C
 # flags, so strip it from the Objective-C ones too.

@@ -1077,6 +1077,8 @@ NSPasteboard *mactty_pasteboard(void)
     cmdline_get_passwd_state = cmdline_get_passwd_input_state_new;
     vt = select_backend(conf);
     seat_set_trust_status(&fe.seat, true);
+    /* Pageant, if it is running, is the agent (as on Windows). */
+    mactty_select_agent();
     error = backend_init(vt, &fe.seat, &backend, logctx, conf,
                          conf_get_str(conf, CONF_host),
                          conf_get_int(conf, CONF_port),

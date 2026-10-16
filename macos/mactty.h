@@ -43,4 +43,20 @@ char *mactty_font_display_name(const char *fontspec_name);
 char **mactty_serial_lines(void);
 void mactty_free_string_array(char **array);
 
+/* pageant-socket.c: Pageant's agent socket. The fixed path is a link
+ * to the live socket ($PUTTYDIR or ~/.putty, then "pageant.sock"). */
+char *mactty_pageant_link_path(void);
+bool mactty_agent_socket_alive(const char *path);
+/* The socket of the running Pageant (the link, or where it points if
+ * the link is too long to connect to), or NULL. */
+char *mactty_pageant_socket(void);
+/* Point SSH_AUTH_SOCK at Pageant while it runs, and otherwise back at
+ * the agent MacTTY was started with. Called before each connection. */
+void mactty_select_agent(void);
+
+/* The distributed notification Pageant posts to open a session in a
+ * running MacTTY (userInfo: "pid" of the MacTTY addressed, optional
+ * "session" to load). */
+#define MACTTY_OPEN_SESSION_NOTIFICATION "org.mactty.MacTTY.OpenSession"
+
 #endif
