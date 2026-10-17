@@ -24,17 +24,17 @@ flowchart LR
         net["Ağ ve zamanlayıcılar"]
     end
     subgraph front["MacTTY ön yüzü (macos/)"]
-        sf["Session/SessionFrontend.m"]
-        cd["Config/ConfigDialog.m"]
-        el["shared/eventloop.m"]
-        pm["Platform/platform-mac.m"]
+        sf["Session/SessionFrontend.m<br/>TermWin · Seat · LogPolicy"]
+        cd["Config/ConfigDialog.m<br/>dialog.h"]
+        el["shared/eventloop.m<br/>uxsel · timer"]
+        pm["Platform/platform-mac.m<br/>platform kancaları"]
     end
-    term -- TermWin --> sf
-    backend -- Seat --> sf
-    log -- LogPolicy --> sf
-    config -- dialog.h --> cd
-    net -- "uxsel · timer" --> el
-    core -- "platform kancaları" --> pm
+    term --> sf
+    backend --> sf
+    log --> sf
+    config --> cd
+    net --> el
+    core --> pm
 ```
 
 | PuTTY arayüzü | Ne için | MacTTY'deki sahibi |
