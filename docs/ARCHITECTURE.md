@@ -29,12 +29,12 @@ flowchart LR
         el["shared/eventloop.m"]
         pm["Platform/platform-mac.m"]
     end
-    term -- "TermWin: çiz, boyutlandır, pano" --> sf
-    backend -- "Seat: çıktı, parola, host key" --> sf
-    log -- "LogPolicy: olay günlüğü" --> sf
-    config -- "controlbox + dlg_* (dialog.h)" --> cd
-    net -- "uxsel, timer, callback" --> el
-    core -- "platform kancaları: varsayılanlar, hata kutuları" --> pm
+    term -- TermWin --> sf
+    backend -- Seat --> sf
+    log -- LogPolicy --> sf
+    config -- dialog.h --> cd
+    net -- "uxsel · timer" --> el
+    core -- "platform kancaları" --> pm
 ```
 
 | PuTTY arayüzü | Ne için | MacTTY'deki sahibi |
