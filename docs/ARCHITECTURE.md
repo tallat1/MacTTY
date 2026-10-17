@@ -22,6 +22,7 @@ flowchart LR
         config["Ayar paneli tanımları (config.c)"]
         log["Günlük (logging.c)"]
         net["Ağ ve zamanlayıcılar"]
+        plat["Platform arayüzü<br/>(varsayılanlar, hatalar)"]
     end
     subgraph front["MacTTY ön yüzü (macos/)"]
         sf["Session/SessionFrontend.m<br/>TermWin · Seat · LogPolicy"]
@@ -34,7 +35,7 @@ flowchart LR
     log --> sf
     config --> cd
     net --> el
-    core --> pm
+    plat --> pm
 ```
 
 | PuTTY arayüzü | Ne için | MacTTY'deki sahibi |
