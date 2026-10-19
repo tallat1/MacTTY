@@ -186,6 +186,12 @@ satırları onun programın hangi parçalarına bağlı olduğunu gösterir.
 4. `release.sh`, Apple silicon ve Intel için iki ayrı derleme yapar,
    ikilileri `lipo` ile birleştirir, ad-hoc imzalar ve DMG üretir.
 
+Bütün derleme klasörlerinin adı `.noindex` ile biter (`build.noindex/`,
+`build-test.noindex/`, `build-arm64.noindex/`, `build-x86_64.noindex/`,
+`build-universal.noindex/`). Spotlight bu klasörlere bakmaz; yoksa her
+derlenen kopya, içindeki MacTTYgen ve Pageant'la birlikte Mac'in uygulama
+listesine düşer. `dist/` yalnız DMG'yi ve SHA-256 dosyasını tutar.
+
 ## Yeni bir şey nereye yazılır?
 
 | İş | Yer |

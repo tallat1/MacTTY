@@ -5,38 +5,42 @@
 # signed.
 #   ./release.sh
 #
-# Each architecture is built on its own (build-arm64/, build-x86_64/) and
-# the two are joined with lipo: a single two-architecture build would
-# make PuTTY's configure tests for the AES-NI/SHA-NI and NEON crypto
-# code fail on one side and leave that code out of both.
+# Each architecture is built on its own (build-arm64.noindex/,
+# build-x86_64.noindex/) and the two are joined with lipo, in
+# build-universal.noindex/: a single two-architecture build would make
+# PuTTY's configure tests for the AES-NI/SHA-NI and NEON crypto code fail
+# on one side and leave that code out of both. Build folders end in
+# .noindex so that Spotlight skips them and the applications built there
+# do not join the ones on the Mac; dist/ only gets the disk image.
 set -e
 cd "$(dirname "$0")"
 
 version=$(cat VERSION)
 minos=14.0
 dist=dist
-app=$dist/MacTTY.app
+universal=build-universal.noindex
+app=$universal/MacTTY.app
 dmg=$dist/MacTTY-$version.dmg
 
 for arch in arm64 x86_64; do
-  cmake -S putty -B build-$arch -G Ninja \
+  cmake -S putty -B build-$arch.noindex -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES=$arch \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=$minos \
       -DCMAKE_PROJECT_INCLUDE="$PWD/macos/cmake/inject.cmake"
-  ninja -C build-$arch MacTTY
+  ninja -C build-$arch.noindex MacTTY
 done
 
-rm -rf $dist
-mkdir -p $dist
-ditto build-arm64/MacTTY.app $app
+rm -rf $dist $universal
+mkdir -p $dist $universal
+ditto build-arm64.noindex/MacTTY.app $app
 
 # Join every Mach-O file in the bundle with its x86_64 twin.
 machos=$(find $app -type f -perm -u+x | while read -r f; do
   file -b "$f" | grep -q Mach-O && echo "$f"
 done)
 for f in $machos; do
-  lipo -create "$f" "build-x86_64/MacTTY.app/${f#$app/}" -output "$f"
+  lipo -create "$f" "build-x86_64.noindex/MacTTY.app/${f#$app/}" -output "$f"
 done
 
 # lipo leaves the linker's signatures behind, so sign again, inside out:
@@ -75,7 +79,7 @@ codesign --verify --deep --strict $app
 
 # The disk image: the application, a link to /Applications to drag it
 # onto, and MacTTY's icon on the volume.
-stage=$dist/stage
+stage=$universal/stage
 mkdir $stage
 ditto $app $stage/MacTTY.app
 ln -s /Applications $stage/Applications

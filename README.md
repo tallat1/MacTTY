@@ -228,15 +228,17 @@ brew install cmake ninja
 ./build.sh
 ```
 
-Uygulama `build/MacTTY.app` olarak çıkar. `./build.sh debug` hata
-ayıklama derlemesi yapar.
+Uygulama `build.noindex/MacTTY.app` olarak çıkar. `./build.sh debug` hata
+ayıklama derlemesi yapar. Derleme klasörlerinin adı `.noindex` ile biter:
+Spotlight bu klasörlere bakmaz, böylece derlenen kopyalar Mac'teki
+uygulamaların arasına karışmaz.
 
 Dağıtım için `./release.sh` kullanılır. Betik her mimariyi ayrı derler
-(`build-arm64/`, `build-x86_64/`), ikilileri `lipo` ile birleştirir,
-ad-hoc imzalar ve `dist/` altına DMG ile SHA-256 dosyasını yazar. Ardından
-her ikilinin iki mimariyi de içerdiğini, en düşük macOS sürümünün 14.0
-olduğunu ve imzaların geçerli olduğunu denetler. Sürüm numarası `VERSION`
-dosyasındadır.
+(`build-arm64.noindex/`, `build-x86_64.noindex/`), ikilileri `lipo` ile
+birleştirir, ad-hoc imzalar ve `dist/` altına yalnız DMG ile SHA-256
+dosyasını yazar. Ardından her ikilinin iki mimariyi de içerdiğini, en
+düşük macOS sürümünün 14.0 olduğunu ve imzaların geçerli olduğunu
+denetler. Sürüm numarası `VERSION` dosyasındadır.
 
 <details>
 <summary><b>Proje yapısı</b></summary>
