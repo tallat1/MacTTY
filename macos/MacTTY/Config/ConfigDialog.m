@@ -19,6 +19,7 @@
 #include "Config/config-mac.h"
 #import "Terminal/TerminalView.h"
 #import "Session/recent-sessions.h"
+#include "Platform/platform-mac.h"
 
 @class MTControlBox;
 
@@ -1083,7 +1084,30 @@ char *mactty_config_box_saved_name(void)
         if (done)
             break;
     }
+
+    /* A serial adapter plugged in while the box is open shows up in the
+     * serial line list straight away (see serialLinesChanged:). */
+    if (isConfig && !midsession && hostCtrl) {
+        mactty_watch_serial_lines();
+        [NSNotificationCenter.defaultCenter
+            addObserver:self selector:@selector(serialLinesChanged:)
+                   name:MTSerialLinesDidChangeNotification object:nil];
+    }
     return self;
+}
+
+/* A serial line was plugged in or pulled out: take a new line if the
+ * one configured is not there, and refresh the list of lines. */
+- (void)serialLinesChanged:(NSNotification *)n
+{
+    if (ended || !hostCtrl)
+        return;
+    Conf *conf = (Conf *)data;
+    for (NSString *path in n.userInfo[@"added"])
+        if (mac_config_serial_line_added(conf, path.UTF8String))
+            break;
+    if (conf_get_int(conf, CONF_protocol) == PROT_SERIAL)
+        dlg_refresh(hostCtrl, &dp);
 }
 
 - (void)showPanel:(NSInteger)index
@@ -1317,6 +1341,8 @@ static CTFontRef font_for_spec(NSString *spec)
     if (ended)
         return;
     ended = YES;
+    [NSNotificationCenter.defaultCenter removeObserver:self
+        name:MTSerialLinesDidChangeNotification object:nil];
 
     NSFontManager *fm = NSFontManager.sharedFontManager;
     if (fm.target == self) {

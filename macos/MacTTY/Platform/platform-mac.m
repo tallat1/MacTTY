@@ -82,6 +82,17 @@ static int compare_strings(const void *a, const void *b)
     return strcmp(*(char *const *)a, *(char *const *)b);
 }
 
+/* Whether a /dev entry (or a path to one) is a serial line worth
+ * listing. */
+static bool interesting_serial_line(const char *name)
+{
+    const char *base = strrchr(name, '/');
+    base = base ? base + 1 : name;
+    return !strncmp(base, "cu.", 3) &&
+        !strstr(base, "Bluetooth-Incoming-Port") &&
+        !strstr(base, "debug-console");
+}
+
 char **mactty_serial_lines(void)
 {
     size_t n = 0, size = 0;
@@ -90,9 +101,7 @@ char **mactty_serial_lines(void)
     struct dirent *de;
 
     while (dir && (de = readdir(dir)) != NULL) {
-        if (strncmp(de->d_name, "cu.", 3) ||
-            strstr(de->d_name, "Bluetooth-Incoming-Port") ||
-            strstr(de->d_name, "debug-console"))
+        if (!interesting_serial_line(de->d_name))
             continue;
         sgrowarrayn(lines, size, n, 2);
         lines[n++] = dupcat("/dev/", de->d_name);
@@ -156,6 +165,79 @@ char *mactty_serial_line_description(const char *path)
     }
     IOObjectRelease(it);
     return ret;
+}
+
+/*
+ * Serial lines coming and going. IOKit reports each serial port's
+ * service as it appears and as it is terminated; the first batch, the
+ * ports already there, is only drained.
+ */
+
+NSString *const MTSerialLinesDidChangeNotification =
+    @"MTSerialLinesDidChangeNotification";
+
+static IONotificationPortRef serial_notify_port;
+static bool serial_watch_armed;
+
+static NSArray<NSString *> *serial_lines_of(io_iterator_t it)
+{
+    NSMutableArray<NSString *> *paths = [NSMutableArray array];
+    io_object_t service;
+    while ((service = IOIteratorNext(it))) {
+        CFTypeRef callout = IORegistryEntryCreateCFProperty(
+            service, CFSTR(kIOCalloutDeviceKey), kCFAllocatorDefault, 0);
+        if (callout && CFGetTypeID(callout) == CFStringGetTypeID() &&
+            interesting_serial_line(
+                [(__bridge NSString *)callout UTF8String]))
+            [paths addObject:(__bridge NSString *)callout];
+        if (callout)
+            CFRelease(callout);
+        IOObjectRelease(service);
+    }
+    return paths;
+}
+
+static void serial_lines_changed(void *added, io_iterator_t it)
+{
+    NSArray<NSString *> *paths = serial_lines_of(it);
+    if (!serial_watch_armed || !paths.count)
+        return;
+    NSDictionary *info = added ?
+        @{@"added": paths, @"removed": @[]} :
+        @{@"added": @[], @"removed": paths};
+    /* The /dev nodes of a new port may lag its service a little. */
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        [NSNotificationCenter.defaultCenter
+            postNotificationName:MTSerialLinesDidChangeNotification
+                          object:nil userInfo:info];
+    });
+}
+
+void mactty_watch_serial_lines(void)
+{
+    io_iterator_t it;
+
+    if (serial_notify_port)
+        return;
+    serial_notify_port = IONotificationPortCreate(kIOMainPortDefault);
+    if (!serial_notify_port)
+        return;
+    CFRunLoopAddSource(CFRunLoopGetMain(),
+                       IONotificationPortGetRunLoopSource(serial_notify_port),
+                       kCFRunLoopCommonModes);
+    /* Each call consumes its matching dictionary. */
+    if (IOServiceAddMatchingNotification(
+            serial_notify_port, kIOFirstMatchNotification,
+            IOServiceMatching(kIOSerialBSDServiceValue),
+            serial_lines_changed, (void *)1, &it) == KERN_SUCCESS)
+        serial_lines_changed((void *)1, it);
+    if (IOServiceAddMatchingNotification(
+            serial_notify_port, kIOTerminatedNotification,
+            IOServiceMatching(kIOSerialBSDServiceValue),
+            serial_lines_changed, NULL, &it) == KERN_SUCCESS)
+        serial_lines_changed(NULL, it);
+    serial_watch_armed = true;
 }
 
 void mactty_free_string_array(char **array)

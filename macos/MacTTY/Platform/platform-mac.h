@@ -15,4 +15,14 @@ void mactty_free_string_array(char **array);
  * the USB device it belongs to; NULL if nothing is known. */
 char *mactty_serial_line_description(const char *path);
 
+/* Starts watching serial lines come and go (a USB serial adapter
+ * plugged in or pulled out): MTSerialLinesDidChangeNotification is then
+ * posted on the main thread, with userInfo "added" and "removed", each
+ * an array of /dev/cu.* paths. Starting it again does nothing. */
+void mactty_watch_serial_lines(void);
+#ifdef __OBJC__
+@class NSString;
+extern NSString *const MTSerialLinesDidChangeNotification;
+#endif
+
 #endif

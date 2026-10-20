@@ -9,6 +9,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include "putty.h"
 #include "dialog.h"
@@ -93,6 +94,16 @@ static void port_list_handler(dlgcontrol *ctrl, dlgparam *dlg,
         for (size_t i = 0; i < lenof(speeds); i++)
             dlg_listbox_add(ctrl, dlg, speeds[i]);
     dlg_update_done(ctrl, dlg);
+}
+
+bool mac_config_serial_line_added(Conf *conf, const char *path)
+{
+    const char *line = conf_get_str(conf, CONF_serline);
+    struct stat st;
+    if (*line && stat(line, &st) == 0)
+        return false;               /* the configured line is plugged in */
+    conf_set_str(conf, CONF_serline, path);
+    return true;
 }
 
 void mac_setup_config_box(struct controlbox *b, bool midsession,
