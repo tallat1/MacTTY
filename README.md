@@ -271,11 +271,12 @@ release.sh             universal, imzalı DMG
 VERSION                MacTTY sürümü (Info.plist'lere ve About kutularına gider)
 ```
 
-PuTTY kaynağında tek bir değişiklik vardır: `putty/unix/platform.h`
-içindeki `MACTTY` profili (pano davranışı ve Option tuşunun Meta ayarı).
-PuTTY'nin yeni bir sürümüne geçmek için `putty/` klasörünü yenisiyle
-değiştirip bu yamayı yeniden uygulamak yeterlidir
-(`git log -p putty/unix/platform.h`).
+PuTTY kaynağında iki küçük değişiklik vardır: `putty/unix/platform.h`
+içindeki `MACTTY` profili (pano davranışı ve Option tuşunun Meta ayarı)
+ve `putty/unix/serial.c` içinde, seri kablo çıkarılınca bütün programı
+değil yalnız o oturumu bitiren düzeltme. PuTTY'nin yeni bir sürümüne
+geçmek için `putty/` klasörünü yenisiyle değiştirip bu yamaları yeniden
+uygulamak yeterlidir (`git log -p putty/`).
 
 MacTTYgen ve Pageant'ın ayrı uygulama olmasının iki nedeni var. Pageant
 terminal pencereleri kapandıktan sonra da çalışmalı ve Dock simgesi

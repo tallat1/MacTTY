@@ -804,7 +804,9 @@ NSPasteboard *mactty_pasteboard(void)
             closingConfirmed = YES;
             [self.window close];
         } else {
-            [self showInactive:exitcode == 0 ? @"Session ended." :
+            /* INT_MAX: the back end has no exit code (a serial line). */
+            [self showInactive:exitcode == 0 || exitcode == INT_MAX ?
+                @"Session ended." :
                 [NSString stringWithFormat:
                     @"Session ended. The remote side exited with code %d.",
                     exitcode]];

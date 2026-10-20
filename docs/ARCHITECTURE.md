@@ -51,7 +51,7 @@ flowchart LR
 
 ```
 MacTTY/
-├── putty/                 PuTTY 0.85 kaynağı (tek yama: unix/platform.h)
+├── putty/                 PuTTY 0.85 kaynağı (iki küçük yama, aşağıda)
 ├── macos/                 MacTTY'nin kendi kodu
 │   ├── cmake/             derleme: PuTTY'nin CMake'ine kanca, hedefler, ikon
 │   ├── shared/            birden çok uygulamanın kullandığı kod
@@ -124,9 +124,17 @@ flowchart TD
    ve sistem çerçevelerini kullanır.
 2. **MacTTYgen ve Pageant, `MacTTY/` klasöründen hiçbir şey almaz.**
    Ortak bir şey gerekiyorsa `shared/`'a taşınır.
-3. **PuTTY değiştirilmez.** Tek istisna `putty/unix/platform.h` içindeki
-   `MACTTY` profilidir. PuTTY'nin yeni sürümüne geçmek için `putty/`
-   yenisiyle değiştirilip bu yama yeniden uygulanır.
+3. **PuTTY değiştirilmez; iki küçük, belgelenmiş yama dışında:**
+   - `putty/unix/platform.h`: `MACTTY` profili (pano davranışı, Option
+     tuşunun Meta ayarı).
+   - `putty/unix/serial.c`: seri aygıt giderse (USB-seri kablo çıkarılınca
+     okuma/yazma `ENXIO` döner) PuTTY bütün programı `exit(1)` ile
+     kapatıyordu; şimdi yalnız o oturum bir hata mesajıyla biter
+     (`serial_device_lost`).
+
+   İki yama da kodda "MacTTY:" yorumuyla işaretlidir. PuTTY'nin yeni
+   sürümüne geçmek için `putty/` yenisiyle değiştirilip bu yamalar
+   yeniden uygulanır (`git log -p putty/`).
 4. **Her modülün bir başlığı vardır ve dışarıya yalnız o başlıktan açılır.**
    Başka bir modülün `.m` dosyasındaki bir şeye ihtiyaç varsa önce o
    modülün başlığına eklenir. Tek istisna `SessionInternal.h`'tir; yalnız

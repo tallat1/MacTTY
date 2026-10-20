@@ -368,6 +368,23 @@ static void serial_reconfig(Backend *be, Conf *conf)
     }
 }
 
+/*
+ * MacTTY: when the device goes away (a USB serial adapter unplugged),
+ * read() and write() fail with ENXIO. End this session with a fatal
+ * error, as the network back ends do, rather than the whole program;
+ * the window stays, and Restart Session reopens the line once the
+ * device is back. connection_fatal frees nothing before it returns.
+ */
+static void serial_device_lost(Serial *serial, const char *what, int err)
+{
+    serial_close(serial);
+    serial->finished = true;
+    logeventf(serial->logctx, "Error %s serial device: %s",
+              what, strerror(err));
+    seat_connection_fatal(serial->seat, "Error %s serial device: %s",
+                          what, strerror(err));
+}
+
 static void serial_select_result(int fd, int event)
 {
     Serial *serial;
@@ -399,8 +416,8 @@ static void serial_select_result(int fd, int event)
             if (errno == EWOULDBLOCK)
                 return;        /* spurious */
 #endif
-            perror("read serial port");
-            exit(1);
+            serial_device_lost(serial, "reading from", errno);
+            return;
         } else if (ret > 0) {
             serial->inbufsize = seat_stdout(serial->seat, buf, ret);
             serial_uxsel_setup(serial); /* might acquire backlog and freeze */
@@ -449,8 +466,8 @@ static void serial_try_write(Serial *serial)
             break;
         }
         if (ret < 0) {
-            perror("write serial port");
-            exit(1);
+            serial_device_lost(serial, "writing to", errno);
+            return;
         }
         bufchain_consume(&serial->output_data, ret);
     }
