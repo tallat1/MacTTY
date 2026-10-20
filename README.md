@@ -97,7 +97,7 @@ Her sürümde DMG'nin yanında bir `.sha256` dosyası bulunur. Çıktılar
 aynı olmalı:
 
 ```bash
-shasum -a 256 MacTTY-1.0.1.dmg
+shasum -a 256 MacTTY-1.0.2.dmg
 ```
 
 </details>
